@@ -79,6 +79,30 @@ Australia:[
 
 let selectedDestination: string | null = null
 
+// Modal state
+let showModal = false;
+let showTripTypeModal = false;
+function openModal() { showModal = true; }
+function closeModal() { showModal = false; showTripTypeModal = false; }
+const tripTypes = [
+	"Beach / Island Escape",
+	"Adventure & Outdoor",
+	"Nature & Wildlife",
+	"City Exploration",
+	"Cultural & Historical",
+	"Food & Culinary",
+	"Luxury Getaway",
+	"Budget Travel",
+	"Family Vacation",
+	"Romantic / Honeymoon",
+	"Wellness & Relaxation",
+	"Festival / Events",
+	"Road Trip",
+	"Island Hopping",
+	"Photography / Scenic Travel"
+];
+let selectedTripType = "";
+
 /* PROMO CAROUSEL */
 
 let promoContainer: HTMLDivElement
@@ -149,10 +173,110 @@ class:opacity-0={currentSlide!==index}
 {slide.desc}
 </p>
 
-<button class="bg-red-600 px-6 py-2 rounded hover:bg-red-700">
-Book Now
+
+
+<button class="bg-red-600 px-6 py-2 rounded hover:bg-red-700" on:click={openModal}>
+	Book Now
 </button>
 
+<!-- Main Modal Popup -->
+{#if showModal}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+
+<div class="bg-white w-[380px] max-w-full rounded-2xl shadow-2xl p-6 relative animate-scale">
+
+<button
+class="absolute top-3 right-4 text-gray-500 hover:text-black text-xl"
+on:click={closeModal}>
+×
+</button>
+
+<h2 class="text-xl font-bold text-center mb-2 text-black"> 
+Plan Your Dream Trip ✈️
+</h2>
+
+<p class="text-black text-sm text-center mb-6">
+Choose how you want to start your journey
+</p>
+
+<div class="flex flex-col gap-3">
+
+<button
+class="flex items-center justify-between text-black bg-gray-100 hover:bg-red-600 hover:text-white transition p-4 rounded-xl shadow group"
+on:click={() => { showModal = false; showTripTypeModal = true; }}
+>
+<span class="font-medium">Find a Trip For Me</span>
+<span class="group-hover:translate-x-1 transition">→</span>
+</button>
+
+<button
+class=" text-black flex items-center justify-between bg-gray-100 hover:bg-red-600 hover:text-white transition p-4 rounded-xl shadow group"
+>
+<span class="font-medium">Browse All Tours</span>
+<span class="group-hover:translate-x-1 transition">→</span>
+</button>
+
+</div>
+
+</div>
+</div>
+{/if}
+
+<!-- Trip Type Modal Popup -->
+{#if showTripTypeModal}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+
+<div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 relative animate-scale">
+
+<!-- CLOSE -->
+<button
+class="absolute top-3 right-4 text-gray-500 hover:text-black text-xl"
+on:click={closeModal}>
+×
+</button>
+
+<!-- TITLE -->
+<h2 class="text-xl font-bold mb-1 text-gray-800">
+What kind of trip are you looking for?
+</h2>
+
+<p class="text-gray-500 text-sm mb-5">
+Select your travel style to personalize your experience
+</p>
+
+<!-- GRID -->
+<div class="grid grid-cols-2 sm:grid-cols-2 gap-3 mb-6">
+
+{#each tripTypes as type}
+<button
+class={`p-3 rounded-xl border text-sm text-left transition font-medium
+${selectedTripType === type 
+? 'bg-red-50 border-red-600 text-red-700 shadow'
+: 'bg-gray-100 hover:bg-gray-200 text-gray-700'}
+`}
+on:click={() => selectedTripType = type}
+>
+{type}
+</button>
+{/each}
+
+</div>
+
+<!-- BUTTON -->
+<button
+class={`w-full py-3 rounded-xl font-semibold transition text-white
+${selectedTripType 
+? 'bg-red-600 hover:bg-red-700 shadow-lg'
+: 'bg-gray-300 cursor-not-allowed'}
+`}
+disabled={!selectedTripType}
+>
+Continue →
+</button>
+
+</div>
+</div>
+{/if}
 </div>
 
 </div>
