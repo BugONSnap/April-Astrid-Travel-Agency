@@ -227,6 +227,23 @@ export const message = pgTable("message", {
   sent_at: timestamp("sent_at").notNull().defaultNow(),
 });
 
+/* ================= PASSWORD RESET ================= */
+export const passwordResetToken = pgTable("password_reset_token", {
+  reset_token_id: serial("reset_token_id").primaryKey(),
+
+  user_id: integer("user_id")
+    .notNull()
+    .references(() => user.user_id),
+
+  // Store a hash of the raw token to avoid persisting the raw secret.
+  token_hash: text("token_hash").notNull().unique(),
+
+  created_at: timestamp("created_at").notNull().defaultNow(),
+  expires_at: timestamp("expires_at").notNull(),
+
+  used_at: timestamp("used_at"),
+});
+
 /* ================= TYPES ================= */
 
 export type UserType = typeof user.$inferInsert;
