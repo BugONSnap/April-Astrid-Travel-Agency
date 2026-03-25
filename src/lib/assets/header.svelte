@@ -10,7 +10,7 @@
 	const user = $derived(userProp ?? page.data.user);
 	const accountLabel = $derived.by(() => {
 		if (!user) return "Sign in";
-		const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+		const name = [user.first_name].filter(Boolean).join(" ").trim();
 		return name || user.email;
 	});
 	const accountHref = $derived(user ? "/profile" : "/login");
