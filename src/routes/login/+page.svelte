@@ -9,19 +9,69 @@
 	let regPassword = '';
 	let regConfirmPassword = '';
 
+	let loginEmail = '';
+	let loginPassword = '';
+
+	let regEmail = '';
+	let regFirstName = '';
+	let regLastName = '';
+
+	let formError = '';
+	let submitting = false;
+
 	$: passwordMismatch =
 		regConfirmPassword.length > 0 && regPassword !== regConfirmPassword;
 
-	function login(e: Event) {
+	async function login(e: Event) {
 		e.preventDefault();
-		goto('/dashboard');
+		formError = '';
+		submitting = true;
+		try {
+			const res = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					email: loginEmail,
+					password: loginPassword
+				})
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				formError = typeof data.message === 'string' ? data.message : 'Login failed';
+				return;
+			}
+			await goto('/dashboard');
+		} finally {
+			submitting = false;
+		}
 	}
 
-	function register(e: Event) {
+	async function register(e: Event) {
 		e.preventDefault();
+		formError = '';
+		if (passwordMismatch) return;
 
-		if (!passwordMismatch) {
-			goto('/dashboard');
+		submitting = true;
+		try {
+			const res = await fetch('/api/auth/register', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					email: regEmail,
+					password: regPassword,
+					first_name: regFirstName,
+					last_name: regLastName
+				})
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				formError =
+					typeof data.message === 'string' ? data.message : 'Registration failed';
+				return;
+			}
+			await goto('/dashboard');
+		} finally {
+			submitting = false;
 		}
 	}
 </script>
@@ -64,27 +114,40 @@
 			<div class="flex mb-6">
 
 				<button
+					type="button"
 					class="flex-1 py-2 font-semibold rounded-l-lg
 					{activeTab === 'login'
 						? 'bg-red-600 text-white'
 						: 'bg-gray-200'}"
-					onclick={() => (activeTab = 'login')}
+					onclick={() => {
+						activeTab = 'login';
+						formError = '';
+					}}
 				>
 					Login
 				</button>
 
 				<button
+					type="button"
 					class="flex-1 py-2 font-semibold rounded-r-lg
 					{activeTab === 'register'
 						? 'bg-red-600 text-white'
 						: 'bg-gray-200'}"
-					onclick={() => (activeTab = 'register')}
+					onclick={() => {
+						activeTab = 'register';
+						formError = '';
+					}}
 				>
 					Register
 				</button>
 
 			</div>
 
+			{#if formError}
+				<p class="text-sm text-red-600 mb-4" role="alert">
+					{formError}
+				</p>
+			{/if}
 
 			<!-- LOGIN -->
 			{#if activeTab === 'login'}
@@ -94,9 +157,14 @@
 					<input
 						type="email"
 						placeholder="Email"
+						autocomplete="email"
+						bind:value={loginEmail}
+						required
 						class="w-full rounded-full bg-gray-200
 							   py-3 px-5 outline-none
-							   focus:ring-2 focus:ring-red-500"
+							   focus:ring-2 focus:ring-red-500
+							   disabled:opacity-50"
+						disabled={submitting}
 					/>
 
 					<div class="relative">
@@ -104,9 +172,13 @@
 						<input
 							type={showPassword ? 'text' : 'password'}
 							placeholder="Password"
+							autocomplete="current-password"
+							bind:value={loginPassword}
+							required
 							class="w-full rounded-full bg-gray-200
 								   py-3 px-5 outline-none
 								   focus:ring-2 focus:ring-red-500"
+							disabled={submitting}
 						/>
 
 						<button
@@ -121,11 +193,13 @@
 
 					<button
 						type="submit"
+						disabled={submitting}
 						class="w-full bg-red-600 text-white
 							   py-3 rounded-full font-semibold
-							   hover:bg-red-700 transition"
+							   hover:bg-red-700 transition
+							   disabled:opacity-50"
 					>
-						LOG IN
+						{submitting ? 'Please wait…' : 'LOG IN'}
 					</button>
 
 				</form>
@@ -137,29 +211,64 @@
 				<form class="space-y-4" onsubmit={register}>
 
 					<input
-						type="email"
-						placeholder="Email"
+						type="text"
+						placeholder="First name"
+						autocomplete="given-name"
+						bind:value={regFirstName}
+						required
 						class="w-full rounded-full bg-gray-200
 							   py-3 px-5 outline-none
 							   focus:ring-2 focus:ring-red-500"
+						disabled={submitting}
+					/>
+
+					<input
+						type="text"
+						placeholder="Last name"
+						autocomplete="family-name"
+						bind:value={regLastName}
+						required
+						class="w-full rounded-full bg-gray-200
+							   py-3 px-5 outline-none
+							   focus:ring-2 focus:ring-red-500"
+						disabled={submitting}
+					/>
+
+					<input
+						type="email"
+						placeholder="Email"
+						autocomplete="email"
+						bind:value={regEmail}
+						required
+						class="w-full rounded-full bg-gray-200
+							   py-3 px-5 outline-none
+							   focus:ring-2 focus:ring-red-500"
+						disabled={submitting}
 					/>
 
 					<input
 						type="password"
 						placeholder="Password"
+						autocomplete="new-password"
 						bind:value={regPassword}
+						required
+						minlength="8"
 						class="w-full rounded-full bg-gray-200
 							   py-3 px-5 outline-none
 							   focus:ring-2 focus:ring-red-500"
+						disabled={submitting}
 					/>
 
 					<input
 						type="password"
 						placeholder="Confirm Password"
+						autocomplete="new-password"
 						bind:value={regConfirmPassword}
+						required
 						class="w-full rounded-full bg-gray-200
 							   py-3 px-5 outline-none
 							   focus:ring-2 focus:ring-red-500"
+						disabled={submitting}
 					/>
 
 					{#if passwordMismatch}
@@ -170,11 +279,13 @@
 
 					<button
 						type="submit"
+						disabled={submitting || passwordMismatch}
 						class="w-full bg-red-600 text-white
 							   py-3 rounded-full font-semibold
-							   hover:bg-red-700 transition"
+							   hover:bg-red-700 transition
+							   disabled:opacity-50"
 					>
-						CREATE ACCOUNT
+						{submitting ? 'Please wait…' : 'CREATE ACCOUNT'}
 					</button>
 
 				</form>
@@ -190,4 +301,3 @@
 	</div>
 
 </main>
-	

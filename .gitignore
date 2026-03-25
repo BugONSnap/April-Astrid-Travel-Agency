@@ -21,3 +21,7 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# User-uploaded profile images (keep folder via .gitkeep)
+static/uploads/profiles/*
+!static/uploads/profiles/.gitkeep

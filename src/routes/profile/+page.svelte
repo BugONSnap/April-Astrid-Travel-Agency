@@ -1,8 +1,16 @@
 <script lang="ts">
+import { enhance } from '$app/forms'
+import { untrack } from 'svelte'
 import Header from '$lib/assets/header.svelte'
+import type { PageData } from './$types'
 
-let selectedMenu = 0
-let menuOpen = false
+/** Matches `employment_status` in schema */
+const EMPLOYMENT_OPTIONS = ['STUDENT', 'EMPLOYED', 'UNEMPLOYED'] as const
+
+let { data, form }: { data: PageData; form?: { message?: string; success?: boolean } } = $props()
+
+let selectedMenu = $state(0)
+let menuOpen = $state(false)
 
 const menuItems = [
 "Profile",
@@ -14,17 +22,25 @@ const menuItems = [
 "Explore"
 ]
 
-// PROFILE DATA
-let formData = {
-lastName: "Doe",
-firstName: "Jane",
-middleName: "Navarro",
-nickname: "",
-birthDate: "2004-02-22",
-age: "20",
-sex: "F",
-religion: "Roman Catholic",
-nationality: "Filipino"
+let formData = $state({ ...data.profile })
+let avatarPreview = $state<string | null>(null)
+
+$effect(() => {
+	data.profile
+	formData = { ...data.profile }
+	untrack(() => {
+		if (avatarPreview) {
+			URL.revokeObjectURL(avatarPreview)
+			avatarPreview = null
+		}
+	})
+})
+
+function onAvatarPicked(e: Event) {
+	const input = e.currentTarget as HTMLInputElement
+	const file = input.files?.[0]
+	if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+	avatarPreview = file ? URL.createObjectURL(file) : null
 }
 
 // BOOKINGS DATA
@@ -49,13 +65,13 @@ status: "Scheduled"
 }
 ]
 
-let filter = "All"
-let search = ""
+let filter = $state("All")
+let search = $state("")
 </script>
 
 <Header />
 
-<button class="mobile-menu" on:click={() => menuOpen = !menuOpen}>
+<button class="mobile-menu" type="button" onclick={() => (menuOpen = !menuOpen)}>
 ☰ Menu
 </button>
 
@@ -68,10 +84,11 @@ let search = ""
 <nav class="sidebar-menu">
 {#each menuItems as item, index}
 <button
+type="button"
 class:selected={selectedMenu === index}
-on:click={() => {
-selectedMenu = index
-menuOpen = false
+onclick={() => {
+	selectedMenu = index
+	menuOpen = false
 }}
 >
 {item}
@@ -90,40 +107,68 @@ menuOpen = false
 
 <div class="profile-card">
 
+{#if form?.message}
+<p class="form-msg form-msg-error" role="alert">{form.message}</p>
+{/if}
+{#if form?.success}
+<p class="form-msg form-msg-ok" role="status">Profile saved.</p>
+{/if}
+
+<form method="post" action="?/updateProfile" use:enhance enctype="multipart/form-data" class="profile-form">
 <div class="section">
 <div class="section-title">1 PERSONAL INFORMATION</div>
 <div class="grid">
-<input placeholder="Last Name" bind:value={formData.lastName} />
-<input placeholder="First Name" bind:value={formData.firstName} />
-<input placeholder="Middle Name" bind:value={formData.middleName} />
-<input placeholder="Nickname" bind:value={formData.nickname} />
-<input type="date" bind:value={formData.birthDate} />
-<input placeholder="Age" bind:value={formData.age} />
-<input placeholder="Sex" bind:value={formData.sex} />
-<input placeholder="Religion" bind:value={formData.religion} />
-<input placeholder="Nationality" bind:value={formData.nationality} />
+<input name="last_name" placeholder="Last Name" bind:value={formData.last_name} required />
+<input name="first_name" placeholder="First Name" bind:value={formData.first_name} required />
+<input name="middle_name" placeholder="Middle Name" bind:value={formData.middle_name} />
+<input type="date" name="birthdate" bind:value={formData.birthdate} />
+<input name="age" type="number" min="0" max="130" placeholder="Age" bind:value={formData.age} />
+<input name="gender" placeholder="Gender" bind:value={formData.gender} />
+<input name="nationality" placeholder="Nationality" bind:value={formData.nationality} />
+<input name="civil_status" placeholder="Civil status" bind:value={formData.civil_status} />
 </div>
 </div>
 
 <div class="section">
 <div class="section-title">2 CONTACT INFORMATION</div>
 <div class="grid">
-<input placeholder="Email Address" />
-<input placeholder="Contact Number" />
-<input placeholder="Address" />
-<input placeholder="City" />
+<input name="email" type="email" placeholder="Email Address" bind:value={formData.email} required />
+<input name="contact_number" placeholder="Contact Number" bind:value={formData.contact_number} />
+<input name="home_address" class="full-row" placeholder="Home address" bind:value={formData.home_address} />
 </div>
 </div>
 
 <div class="section">
 <div class="section-title">3 OTHERS</div>
 <div class="grid">
-<input placeholder="Preferred Language" />
-<input placeholder="Time Zone" />
+<label class="select-label full-row">
+<span>Employment status</span>
+<select name="employment_status" bind:value={formData.employment_status}>
+<option value="">—</option>
+{#each EMPLOYMENT_OPTIONS as opt}
+<option value={opt}>{opt}</option>
+{/each}
+</select>
+</label>
+<div class="avatar-block full-row">
+<span class="avatar-label">Profile photo</span>
+{#if avatarPreview || formData.profile_picture}
+<img class="avatar-preview" src={avatarPreview ?? formData.profile_picture} alt="" width="120" height="120" />
+{/if}
+<input
+	type="file"
+	name="profile_picture"
+	accept="image/jpeg,image/png,image/webp,image/gif"
+	class="file-input"
+	onchange={onAvatarPicked}
+/>
+<p class="field-hint">JPEG, PNG, WebP, or GIF, up to 2 MB. Submit without choosing a file to keep your current photo.</p>
+</div>
 </div>
 </div>
 
-<button class="save-btn">💾 Save and Continue</button>
+<button class="save-btn" type="submit">💾 Save and Continue</button>
+</form>
 
 </div>
 
@@ -137,10 +182,10 @@ menuOpen = false
 <div class="booking-controls">
 
 <div class="filters">
-<button class:selected={filter==="All"} on:click={()=>filter="All"}>All</button>
-<button on:click={()=>filter="Scheduled"}>Scheduled</button>
-<button on:click={()=>filter="New"}>New</button>
-<button on:click={()=>filter="Old"}>Old</button>
+<button type="button" class:selected={filter==="All"} onclick={() => (filter = "All")}>All</button>
+<button type="button" onclick={() => (filter = "Scheduled")}>Scheduled</button>
+<button type="button" onclick={() => (filter = "New")}>New</button>
+<button type="button" onclick={() => (filter = "Old")}>Old</button>
 </div>
 
 <div class="actions">
@@ -270,10 +315,82 @@ grid-template-columns: repeat(3,1fr);
 gap:12px;
 }
 
+.grid .full-row{
+grid-column: 1 / -1;
+}
+
+.avatar-block{
+display:flex;
+flex-direction:column;
+align-items:flex-start;
+gap:10px;
+}
+
+.avatar-label{
+font-size:0.875rem;
+font-weight:600;
+}
+
+.avatar-preview{
+width:120px;
+height:120px;
+object-fit:cover;
+border-radius:50%;
+border:2px solid #ddd;
+}
+
+.file-input{
+max-width:100%;
+font-size:0.875rem;
+}
+
+.field-hint{
+margin:0;
+font-size:0.8rem;
+color:#666;
+max-width:42rem;
+}
+
+.select-label{
+display:flex;
+flex-direction:column;
+gap:6px;
+font-size:0.875rem;
+font-weight:600;
+}
+
+select{
+padding:10px;
+border-radius:8px;
+border:1px solid #ddd;
+background:white;
+}
+
 input{
 padding:10px;
 border-radius:8px;
 border:1px solid #ddd;
+}
+
+.profile-form{
+display:block;
+}
+
+.form-msg{
+margin:0 0 16px;
+padding:12px 14px;
+border-radius:8px;
+font-weight:600;
+}
+
+.form-msg-error{
+background:#ffebee;
+color:#b71c1c;
+}
+
+.form-msg-ok{
+background:#e8f5e9;
+color:#2e7d32;
 }
 
 .save-btn{
@@ -283,6 +400,11 @@ color:white;
 padding:10px 18px;
 border-radius:20px;
 border:none;
+cursor:pointer;
+}
+
+.save-btn:hover{
+filter:brightness(1.05);
 }
 
 /* BOOKINGS */
