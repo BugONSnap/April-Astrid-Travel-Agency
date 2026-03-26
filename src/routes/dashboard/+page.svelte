@@ -1,81 +1,48 @@
 <script lang="ts">
 import { onMount } from "svelte"
+import type { PageProps } from "./$types";
 import Header from "$lib/assets/header.svelte"
 import Footer from "$lib/assets/footer.svelte"
+
+let { data }: PageProps = $props();
 
 /* HERO SLIDES */
 
 let currentSlide = 0
 
-const slides = [
-{
-title:"Visit Japan 2026",
-desc:"Cherry Blossom Tour",
-image:"/japan.jpg"
-},
-{
-title:"Explore Korea",
-desc:"Seoul Winter Adventure",
-image:"/korea.jpg"
-},
-{
-title:"Europe Grand Tour",
-desc:"10 Countries Travel Package",
-image:"/europe.webp"
-}
-]
+const slides = (data.promoPackages ?? []).slice(0, 3).map((p: any) => ({
+	title: p.package_name,
+	desc: p.description ?? "",
+	image: p.image_url ?? "",
+}))
 
-onMount(()=>{
-setInterval(()=>{
-currentSlide=(currentSlide+1)%slides.length
-},5000)
+onMount(() => {
+	if (slides.length === 0) return;
+	const id = setInterval(() => {
+		currentSlide = (currentSlide + 1) % slides.length
+	}, 5000)
+	return () => clearInterval(id)
 })
 
 /* PROMOS */
 
-const promos=[
-{title:"Tokyo Promo",price:"₱25,000",badge:"LIMITED",image:"/japan.jpg"},
-{title:"Korea Winter",price:"₱22,000",badge:"SALE",image:"/korea.jpg"},
-{title:"Singapore Trip",price:"₱18,000",badge:"HOT",image:"/singapore.webp"},
-{title:"Hong Kong Tour",price:"₱19,000",badge:"NEW",image:"/hk.webp"},
-{title:"Thailand Escape",price:"₱17,000",badge:"HOT",image:"/thailand.jpg"}
-]
+const promos = (data.starPackages ?? []).map((p: any) => ({
+	title: p.package_name,
+	price: `₱${Number(p.price).toLocaleString("en-PH")}`,
+	badge: p.category ?? "STAR",
+	image: p.image_url ?? "",
+}));
 
 /* DESTINATIONS */
 
-const destinations=[
-{name:"Japan",image:"/japan.jpg"},
-{name:"Korea",image:"/korea.jpg"},
-{name:"Europe",image:"/europe.webp"},
-{name:"Singapore",image:"/singapore.webp"},
-{name:"Thailand",image:"/thailand.jpg"},
-{name:"Australia",image:"/australia.webp"}
-]
+const destinations = (data.destinations ?? []).map((d: any) => ({
+	name: d.country_name,
+	image: d.image_cover ?? "",
+}));
 
 /* PACKAGES */
 
-const packages={
-Japan:[
-{name:"Tokyo Cherry Blossom",price:"₱35,000"},
-{name:"Osaka Food Tour",price:"₱30,000"}
-],
-Korea:[
-{name:"Seoul Winter Tour",price:"₱28,000"},
-{name:"Busan Beach Escape",price:"₱26,000"}
-],
-Europe:[
-{name:"10 Country Europe",price:"₱120,000"}
-],
-Singapore:[
-{name:"Singapore City Tour",price:"₱25,000"}
-],
-Thailand:[
-{name:"Bangkok Explorer",price:"₱22,000"}
-],
-Australia:[
-{name:"Sydney Adventure",price:"₱90,000"}
-]
-}
+const packages = data.packagesByDestinationCountry ?? {}
 
 let selectedDestination: string | null = null
 
@@ -150,6 +117,12 @@ promoContainer.scrollLeft += 280
 <!-- HERO CAROUSEL -->
 
 <section class="w-full h-[420px] relative overflow-hidden">
+
+{#if slides.length === 0}
+	<div class="absolute inset-0 bg-gray-100 flex items-center justify-center text-gray-600">
+		More coming soon
+	</div>
+{:else}
 
 {#each slides as slide,index}
 
@@ -284,6 +257,7 @@ Continue →
 </div>
 
 {/each}
+{/if}
 
 </section>
 
@@ -297,6 +271,11 @@ Continue →
 ⭐ Star Promotions
 </h2>
 
+{#if promos.length === 0}
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
+{:else}
 <div
 bind:this={promoContainer}
 class="flex gap-6 overflow-x-auto px-6 cursor-grab scroll-smooth no-scrollbar"
@@ -341,6 +320,7 @@ Book Now
 {/each}
 
 </div>
+{/if}
 
 </section>
 
@@ -356,6 +336,11 @@ Book Now
 🌏 Popular Destinations
 </h2>
 
+{#if destinations.length === 0}
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
+{:else}
 <div class="grid lg:grid-cols-3 md:grid-cols-2 grid-cols-1 gap-6">
 
 {#each destinations as d}
@@ -384,7 +369,10 @@ class="w-full h-56 object-cover group-hover:scale-110 transition duration-500"
 
 </div>
 
+{/if}
+
 </div>
+
 
 </section>
 
@@ -392,7 +380,7 @@ class="w-full h-56 object-cover group-hover:scale-110 transition duration-500"
 
 <!-- DESTINATION PACKAGES -->
 
-{#if selectedDestination && packages[selectedDestination]}
+{#if selectedDestination && packages[selectedDestination] && packages[selectedDestination].length > 0}
 
 <section class="max-w-6xl mx-auto px-4 py-12">
 
@@ -424,6 +412,14 @@ Book Package
 
 </div>
 
+</section>
+
+{:else if selectedDestination}
+
+<section class="max-w-6xl mx-auto px-4 py-12">
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
 </section>
 
 {/if}

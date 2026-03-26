@@ -16,7 +16,7 @@
 </script>
 
 <div class="w-full">
-	<header class="grid grid-cols-2 sm:grid-cols-[auto_1fr_auto] items-center py-3 px-4 sm:px-8 bg-black text-white">
+	<header class="grid grid-cols-2 sm:grid-cols-[auto_1fr_auto] items-center py-3 px-4 sm:px-8 bg-[#c41e3a] text-white">
 		<a href="/admin" class="flex items-center gap-3 text-white no-underline col-span-1">
 			<span class="text-xl font-semibold font-serif tracking-wide">Admin Panel</span>
 		</a>
@@ -78,7 +78,7 @@
 	</header>
 
 	{#if navOpen}
-		<nav class="grid grid-cols-1 bg-black text-white px-4 py-2 sm:hidden animate-fade-in">
+		<nav class="grid grid-cols-1 bg-[#c41e3a] text-white px-4 py-2 sm:hidden animate-fade-in">
 			<a href="/admin" class="py-2 hover:underline font-medium text-base">Dashboard</a>
 			<a href="/admin/users" class="py-2 hover:underline font-medium text-base">Users</a>
 			<a href="/admin/destinations" class="py-2 hover:underline font-medium text-base">Destinations</a>

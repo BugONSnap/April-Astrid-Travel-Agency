@@ -4,94 +4,92 @@
 	let { data }: PageProps = $props();
 </script>
 
-<div class="space-y-6">
-	<div class="flex items-center justify-between gap-4">
-		<h1 class="text-2xl font-bold">Manage Bookings</h1>
-		<a href="/admin" class="text-sm text-gray-600 hover:underline">Back to dashboard</a>
-	</div>
+<svelte:head>
+	<title>Admin · Bookings</title>
+</svelte:head>
 
-	<section class="bg-white border rounded-lg p-4">
-		<h2 class="font-semibold mb-3">Bookings</h2>
-		<div class="overflow-x-auto">
-			<table class="min-w-[1100px] w-full text-sm">
-				<thead>
-					<tr class="text-left border-b">
-						<th class="p-2">Booking</th>
-						<th class="p-2">User</th>
-						<th class="p-2">Package</th>
-						<th class="p-2">Travel</th>
-						<th class="p-2">People / Total</th>
-						<th class="p-2">Update Statuses</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each data.bookings as b}
-						<tr class="border-b align-top">
-							<td class="p-2">
-								<div class="font-semibold">#{b.booking_id}</div>
-								<div class="text-gray-600">Booked: {b.booking_date ? new Date(b.booking_date).toLocaleString() : "—"}</div>
-							</td>
-							<td class="p-2">
-								<div>{b.first_name} {b.last_name}</div>
-								<div class="text-gray-600">{b.email}</div>
-							</td>
-							<td class="p-2">
-								<div class="font-medium">{b.package_name}</div>
-								<div class="text-gray-600">#{b.package_id}</div>
-							</td>
-							<td class="p-2">
-								<div>{b.travel_date ? new Date(b.travel_date).toLocaleDateString() : "—"}</div>
-								<div class="text-gray-600">Booking: <span class="font-medium">{b.booking_status}</span></div>
-								<div class="text-gray-600">Payment: <span class="font-medium">{b.payment_status}</span></div>
-							</td>
-							<td class="p-2">
-								<div>{b.number_of_people} people</div>
-								<div class="font-semibold">Total: {b.total_price}</div>
-							</td>
-							<td class="p-2">
-								<form method="post" action="?/updateBooking" class="space-y-2">
-									<input type="hidden" name="booking_id" value={b.booking_id} />
-									<div>
-										<label class="block text-xs text-gray-600 mb-1">Booking status</label>
-										<select name="booking_status" class="input w-full">
-											{#each data.bookingStatuses as s}
-												<option value={s} selected={b.booking_status === s}>{s}</option>
-											{/each}
-										</select>
-									</div>
-									<div>
-										<label class="block text-xs text-gray-600 mb-1">Payment status</label>
-										<select name="payment_status" class="input w-full">
-											{#each data.paymentStatuses as s}
-												<option value={s} selected={b.payment_status === s}>{s}</option>
-											{/each}
-										</select>
-									</div>
-									<button type="submit" class="btn-secondary w-full">Update</button>
-								</form>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+<div class="ap-page ap-stack">
+	<header class="ap-page-head">
+		<div>
+			<p class="ap-kicker">Operations</p>
+			<h1 class="ap-title">Bookings</h1>
+			<p class="ap-sub">Update booking and payment status for each reservation. Scroll sideways on phones to see all columns.</p>
 		</div>
+		<a href="/admin" class="ap-back">← Dashboard</a>
+	</header>
+
+	<section class="ap-card" aria-labelledby="bookings-heading">
+		<h2 id="bookings-heading" class="ap-card-title">All bookings</h2>
+		{#if data.bookings.length === 0}
+			<p class="ap-empty">No bookings yet.</p>
+		{:else}
+			<div class="ap-table-wrap">
+				<table class="ap-table">
+					<thead>
+						<tr>
+							<th>Booking</th>
+							<th>Guest</th>
+							<th>Package</th>
+							<th>Trip</th>
+							<th>Pax / total</th>
+							<th>Status</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.bookings as b}
+							<tr>
+								<td>
+									<strong>#{b.booking_id}</strong>
+									<div class="ap-muted">
+										{b.booking_date ? new Date(b.booking_date).toLocaleString() : "—"}
+									</div>
+								</td>
+								<td>
+									{b.first_name} {b.last_name}
+									<div class="ap-muted">{b.email}</div>
+								</td>
+								<td>
+									{b.package_name}
+									<div class="ap-muted">Pkg #{b.package_id}</div>
+								</td>
+								<td>
+									<div>{b.travel_date ? new Date(b.travel_date).toLocaleDateString() : "—"}</div>
+									<div class="ap-muted">Book: {b.booking_status}</div>
+									<div class="ap-muted">Pay: {b.payment_status}</div>
+								</td>
+								<td>
+									{b.number_of_people} pax
+									<div class="ap-muted">Total {b.total_price?.toLocaleString?.() ?? b.total_price}</div>
+								</td>
+								<td>
+									<form method="post" action="?/updateBooking" class="ap-form-grid ap-nested-form">
+										<input type="hidden" name="booking_id" value={b.booking_id} />
+										<div class="ap-field ap-span-2">
+											<label class="ap-label" for={`bs-${b.booking_id}`}>Booking</label>
+											<select id={`bs-${b.booking_id}`} name="booking_status" class="ap-select">
+												{#each data.bookingStatuses as s}
+													<option value={s} selected={b.booking_status === s}>{s}</option>
+												{/each}
+											</select>
+										</div>
+										<div class="ap-field ap-span-2">
+											<label class="ap-label" for={`ps-${b.booking_id}`}>Payment</label>
+											<select id={`ps-${b.booking_id}`} name="payment_status" class="ap-select">
+												{#each data.paymentStatuses as s}
+													<option value={s} selected={b.payment_status === s}>{s}</option>
+												{/each}
+											</select>
+										</div>
+										<div class="ap-form-actions ap-span-2">
+											<button type="submit" class="ap-btn ap-btn--secondary ap-btn--block">Apply</button>
+										</div>
+									</form>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 	</section>
 </div>
-
-<style>
-	.input {
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-		padding: 10px;
-		background: #fff;
-	}
-	.btn-secondary {
-		background: #f3f4f6;
-		color: #111827;
-		border-radius: 10px;
-		padding: 10px 14px;
-		font-weight: 600;
-		border: 1px solid #e5e7eb;
-	}
-</style>
-

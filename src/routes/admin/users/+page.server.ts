@@ -1,6 +1,6 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { fail, redirect } from "@sveltejs/kit";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { hashPassword } from "$lib/server/auth";
@@ -33,6 +33,9 @@ export const load: PageServerLoad = async () => {
 			last_name: schema.user.last_name,
 			email: schema.user.email,
 			role: schema.user.role,
+			employment_status: schema.user.employment_status,
+			contact_number: schema.user.contact_number,
+			home_address: schema.user.home_address,
 			created_at: schema.user.created_at,
 		})
 		.from(schema.user)
@@ -129,33 +132,75 @@ export const actions: Actions = {
 
 		const passwordMaybe = optString(data.get("password"));
 
-		const setPayload: any = {
+		const [existing] = await db
+			.select()
+			.from(schema.user)
+			.where(eq(schema.user.user_id, userId))
+			.limit(1);
+
+		if (!existing) {
+			return fail(404, { message: "User not found" });
+		}
+
+		const setPayload: Record<string, unknown> = {
 			first_name,
-			middle_name: optString(data.get("middle_name")) ?? "",
 			last_name,
 			email: email.toLowerCase(),
-			age: optNumber(data.get("age")),
-			contact_number: optString(data.get("contact_number")),
-			birthdate: optString(data.get("birthdate"))
-				? new Date(String(data.get("birthdate")) + "T12:00:00")
-				: null,
-			gender: optString(data.get("gender")),
-			nationality: optString(data.get("nationality")),
-			civil_status: optString(data.get("civil_status")),
-			employment_status:
-				employment_status == null
-					? null
-					: (employment_status as (typeof schema.EMPLOYMENT_STATUS)[number]),
-			home_address: optString(data.get("home_address")),
-			profile_picture: optString(data.get("profile_picture")),
 			role: role as (typeof schema.ROLE)[number],
+			middle_name: existing.middle_name ?? "",
+			age: existing.age,
+			contact_number: existing.contact_number,
+			birthdate: existing.birthdate,
+			gender: existing.gender,
+			nationality: existing.nationality,
+			civil_status: existing.civil_status,
+			employment_status: existing.employment_status,
+			home_address: existing.home_address,
+			profile_picture: existing.profile_picture,
 		};
+
+		if (data.has("middle_name")) {
+			setPayload.middle_name = optString(data.get("middle_name")) ?? "";
+		}
+		if (data.has("age")) {
+			setPayload.age = optNumber(data.get("age"));
+		}
+		if (data.has("contact_number")) {
+			setPayload.contact_number = optString(data.get("contact_number"));
+		}
+		if (data.has("birthdate")) {
+			const b = optString(data.get("birthdate"));
+			setPayload.birthdate = b ? new Date(`${b}T12:00:00`) : null;
+		}
+		if (data.has("gender")) {
+			setPayload.gender = optString(data.get("gender"));
+		}
+		if (data.has("nationality")) {
+			setPayload.nationality = optString(data.get("nationality"));
+		}
+		if (data.has("civil_status")) {
+			setPayload.civil_status = optString(data.get("civil_status"));
+		}
+		if (data.has("home_address")) {
+			setPayload.home_address = optString(data.get("home_address"));
+		}
+		if (data.has("profile_picture")) {
+			setPayload.profile_picture = optString(data.get("profile_picture"));
+		}
+
+		setPayload.employment_status =
+			employment_status == null
+				? null
+				: (employment_status as (typeof schema.EMPLOYMENT_STATUS)[number]);
 
 		if (passwordMaybe) {
 			setPayload.password = await hashPassword(passwordMaybe);
 		}
 
-		await db.update(schema.user).set(setPayload).where(eq(schema.user.user_id, userId));
+		await db
+			.update(schema.user)
+			.set(setPayload as typeof schema.user.$inferInsert)
+			.where(eq(schema.user.user_id, userId));
 
 		throw redirect(303, "/admin/users");
 	},

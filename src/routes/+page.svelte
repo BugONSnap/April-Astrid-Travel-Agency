@@ -1,49 +1,101 @@
-<script>
+<script lang="ts">
 	import Header from '$lib/assets/header.svelte';
 	import Footer from '$lib/assets/footer.svelte';
+	import type { PageProps } from './$types';
+
+	let { data }: PageProps = $props();
+
+	function formatPrice(p: number) {
+		return `₱${p.toLocaleString('en-PH')}`;
+	}
+
+	function snippet(text: string | null | undefined, max = 140) {
+		if (!text) return '';
+		const t = text.trim();
+		if (t.length <= max) return t;
+		return `${t.slice(0, max).trim()}…`;
+	}
+
+	/** Marquee CSS expects several items for a smooth loop; duplicate when few. */
+	function marqueeItems<T>(items: T[]): T[] {
+		if (items.length === 0) return [];
+		if (items.length >= 6) return items;
+		return [...items, ...items];
+	}
+
+	const heroSlides = $derived(
+		data.promoPackages.length > 0 ? data.promoPackages : null,
+	);
+	const heroCount = $derived(heroSlides?.length ?? 1);
+
+	function heroPrev(i: number) {
+		return (i - 1 + heroCount) % heroCount;
+	}
+	function heroNext(i: number) {
+		return (i + 1) % heroCount;
+	}
+
+	const starMarquee = $derived(marqueeItems(data.starPackages));
+	const featuredMarquee = $derived(marqueeItems(data.featuredPackages));
 </script>
 
 <Header />
 
-<!-- [DEBUG] Section: hero-carousel (full-width image slider) -->
+<!-- Hero: PROMO packages from admin, or placeholder -->
 <section class="hero-carousel" data-section="hero-carousel" aria-label="Hero carousel">
 	<div class="carousel">
 		<ul class="slides">
-			<input type="radio" name="radio-buttons" id="img-1" checked />
-			<li class="slide-container">
-				<div class="slide-image">
-					<img src="https://upload.wikimedia.org/wikipedia/commons/9/9e/Timisoara_-_Regional_Business_Centre.jpg" alt="" />
+			{#if heroSlides}
+				{#each heroSlides as p, i (p.package_id)}
+					<input type="radio" name="hero-carousel-slides" id={`hero-slide-${i}`} checked={i === 0} />
+					<li class="slide-container">
+						<div class="slide-image">
+							{#if p.image_url}
+								<img src={p.image_url} alt="" />
+							{:else}
+								<div class="slide-image-fallback" aria-hidden="true"></div>
+							{/if}
+							<div class="slide-caption">
+								<h3>{p.package_name}</h3>
+								<p>
+									{formatPrice(p.price)}
+									{#if p.destination_city || p.destination_country}
+										<span class="slide-caption-meta">
+											· {[p.destination_city, p.destination_country].filter(Boolean).join(', ')}
+										</span>
+									{/if}
+								</p>
+							</div>
+						</div>
+						<div class="carousel-controls">
+							<label for={`hero-slide-${heroPrev(i)}`} class="prev-slide"><span>&lsaquo;</span></label>
+							<label for={`hero-slide-${heroNext(i)}`} class="next-slide"><span>&rsaquo;</span></label>
+						</div>
+					</li>
+				{/each}
+				<div class="carousel-dots">
+					{#each heroSlides as _, i}
+						<label for={`hero-slide-${i}`} class="carousel-dot" id={`hero-dot-${i}`}></label>
+					{/each}
 				</div>
-				<div class="carousel-controls">
-					<label for="img-3" class="prev-slide"><span>&lsaquo;</span></label>
-					<label for="img-2" class="next-slide"><span>&rsaquo;</span></label>
+			{:else}
+				<input type="radio" name="hero-carousel-slides" id="hero-slide-0" checked />
+				<li class="slide-container">
+					<div class="slide-image slide-image--placeholder">
+						<div class="slide-caption slide-caption--center">
+							<h3>More coming soon</h3>
+							<p>Promotional packages will show here when they are added.</p>
+						</div>
+					</div>
+					<div class="carousel-controls">
+						<label for="hero-slide-0" class="prev-slide"><span>&lsaquo;</span></label>
+						<label for="hero-slide-0" class="next-slide"><span>&rsaquo;</span></label>
+					</div>
+				</li>
+				<div class="carousel-dots">
+					<label for="hero-slide-0" class="carousel-dot" id="hero-dot-0"></label>
 				</div>
-			</li>
-			<input type="radio" name="radio-buttons" id="img-2" />
-			<li class="slide-container">
-				<div class="slide-image">
-					<img src="https://content.r9cdn.net/rimg/dimg/db/02/06b291e8-city-14912-171317ad83a.jpg?width=1750&height=1000&xhint=3040&yhint=2553&crop=true" alt="" />
-				</div>
-				<div class="carousel-controls">
-					<label for="img-1" class="prev-slide"><span>&lsaquo;</span></label>
-					<label for="img-3" class="next-slide"><span>&rsaquo;</span></label>
-				</div>
-			</li>
-			<input type="radio" name="radio-buttons" id="img-3" />
-			<li class="slide-container">
-				<div class="slide-image">
-					<img src="https://speakzeasy.files.wordpress.com/2015/05/twa_blogpic_timisoara-4415.jpg" alt="" />
-				</div>
-				<div class="carousel-controls">
-					<label for="img-2" class="prev-slide"><span>&lsaquo;</span></label>
-					<label for="img-1" class="next-slide"><span>&rsaquo;</span></label>
-				</div>
-			</li>
-			<div class="carousel-dots">
-				<label for="img-1" class="carousel-dot" id="img-dot-1"></label>
-				<label for="img-2" class="carousel-dot" id="img-dot-2"></label>
-				<label for="img-3" class="carousel-dot" id="img-dot-3"></label>
-			</div>
+			{/if}
 		</ul>
 	</div>
 	<div class="hero-overlay">
@@ -84,120 +136,122 @@
 	</div>
 </section>
 
+<!-- Destinations from admin -->
+<section
+	class="w-full bg-[#f7f7f7] py-12 flex flex-col items-center gap-6"
+	data-section="destinations"
+	aria-label="Destinations"
+>
+	<h2 class="m-0 text-3xl sm:text-4xl font-semibold font-serif text-[#111] text-center">
+		Destinations
+	</h2>
+	{#if data.destinations.length === 0}
+		<p
+			class="w-full text-center py-10 text-gray-600 bg-gray-50 rounded-xl border border-gray-200 max-w-[1100px]"
+		>
+			More coming soon
+		</p>
+	{:else}
+		<div class="w-full max-w-[1100px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+			{#each data.destinations as d (d.destination_id)}
+				<a
+					href="/packages"
+					class="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition"
+				>
+					{#if d.image_cover}
+						<img
+							src={d.image_cover}
+							alt={d.country_name}
+							class="w-full h-40 object-cover"
+						/>
+					{:else}
+						<div
+							class="w-full h-40 bg-gradient-to-br from-[#c41e3a]/20 to-slate-800/30"
+							aria-hidden="true"
+						/>
+					{/if}
+					<div class="p-4">
+						<span class="block font-semibold text-lg text-gray-900">
+							{d.city_name ? `${d.city_name}, ` : ''}{d.country_name}
+						</span>
+						{#if d.description}
+							<p class="mt-2 text-sm text-gray-600">{snippet(d.description, 96)}</p>
+						{/if}
+					</div>
+				</a>
+			{/each}
+		</div>
+	{/if}
+</section>
+
 <!-- [DEBUG] Section: packages carousels - Star Packages & Featured Travel Experiences -->
 <section
 	class="packages-carousels-wrapper"
 	data-section="packages-marquee-carousel"
 	aria-label="Packages carousels"
 >
-	<!-- Star Packages carousel -->
+	<!-- Star Packages carousel (category STAR) -->
 	<div class="marquee-carousel-section" data-subsection="star-packages">
 		<h2 class="marquee-section-title">Star Packages</h2>
-		<div class="marquee-carousel" data-mask>
-			<article>
-				<span class="card-label">Sample 1</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 2</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 3</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 4</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 5</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 6</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-		</div>
+		{#if data.starPackages.length === 0}
+			<p class="w-full text-center py-10 text-gray-600 bg-gray-50 rounded-xl border border-gray-200 max-w-[1100px]">More coming soon</p>
+		{:else}
+			<div
+				class="marquee-carousel"
+				data-mask
+				style="--items: {starMarquee.length}"
+			>
+				{#each starMarquee as p, i (p.package_id + '-' + i)}
+					<article style="--i: {i}">
+						<span class="card-label">{p.package_name}</span>
+						{#if p.image_url}
+							<img src={p.image_url} alt="" />
+						{:else}
+							<div class="marquee-card-image-placeholder" aria-hidden="true"></div>
+						{/if}
+						<div class="card-text-block">
+							<p>
+								{snippet(p.description) ||
+									`${formatPrice(p.price)} · ${[p.destination_city, p.destination_country].filter(Boolean).join(', ') || 'Package'}`}
+							</p>
+							<a href="/packages">Read more</a>
+						</div>
+					</article>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
-	<!-- Featured Travel Experiences carousel -->
+	<!-- Featured Travel Experiences (category FEATURED) -->
 	<div class="marquee-carousel-section" data-subsection="featured-travel-experiences">
 		<h2 class="marquee-section-title">Featured Travel Experiences</h2>
-		<div class="marquee-carousel" data-mask>
-			<article>
-				<span class="card-label">Sample 1</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 2</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 3</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 4</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 5</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-			<article>
-				<span class="card-label">Sample 6</span>
-				<img src="https://images.pexels.com/photos/2506923/pexels-photo-2506923.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="" />
-				<div class="card-text-block">
-					<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation.</p>
-					<a href="/packages">Read more</a>
-				</div>
-			</article>
-		</div>
+		{#if data.featuredPackages.length === 0}
+			<p class="w-full text-center py-10 text-gray-600 bg-gray-50 rounded-xl border border-gray-200 max-w-[1100px]">More coming soon</p>
+		{:else}
+			<div
+				class="marquee-carousel"
+				data-mask
+				style="--items: {featuredMarquee.length}"
+			>
+				{#each featuredMarquee as p, i (p.package_id + '-' + i)}
+					<article style="--i: {i}">
+						<span class="card-label">{p.package_name}</span>
+						{#if p.image_url}
+							<img src={p.image_url} alt="" />
+						{:else}
+							<div class="marquee-card-image-placeholder" aria-hidden="true"></div>
+						{/if}
+						<div class="card-text-block">
+							<p>
+								{snippet(p.description) ||
+									`${formatPrice(p.price)} · ${[p.destination_city, p.destination_country].filter(Boolean).join(', ') || 'Package'}`}
+							</p>
+							<a href="/packages">Read more</a>
+						</div>
+					</article>
+				{/each}
+			</div>
+		{/if}
 	</div>
 </section>
 
@@ -308,6 +362,75 @@
 		object-fit: cover;
 	}
 
+	.slide-image-fallback {
+		width: 100%;
+		height: 100%;
+		min-height: 100%;
+		background: linear-gradient(135deg, #1a1a2e 0%, #c41e3a 50%, #16213e 100%);
+	}
+
+	.slide-image--placeholder {
+		background: linear-gradient(135deg, #2d2d44 0%, #c41e3a 45%, #1a1a2e 100%);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.slide-caption {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 1;
+		padding: 2rem 1.25rem 1.25rem;
+		background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+		color: #fff;
+		text-align: left;
+		pointer-events: none;
+	}
+
+	.slide-caption h3 {
+		margin: 0;
+		font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+		font-weight: 600;
+		line-height: 1.25;
+		text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+	}
+
+	.slide-caption p {
+		margin: 0.35rem 0 0;
+		font-size: 0.95rem;
+		opacity: 0.95;
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+	}
+
+	.slide-caption-meta {
+		font-weight: 400;
+		opacity: 0.9;
+	}
+
+	.slide-caption--center {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		background: none;
+		padding: 2rem;
+	}
+
+	.slide-caption--center h3 {
+		font-size: clamp(1.5rem, 4vw, 2.25rem);
+	}
+
+	.slide-caption--center p {
+		max-width: 22rem;
+		margin-top: 0.75rem;
+		line-height: 1.5;
+	}
+
 	.carousel-controls {
 		position: absolute;
 		top: 0;
@@ -387,9 +510,21 @@
 		display: block;
 	}
 
-	input#img-1:checked ~ .carousel-dots label#img-dot-1,
-	input#img-2:checked ~ .carousel-dots label#img-dot-2,
-	input#img-3:checked ~ .carousel-dots label#img-dot-3 {
+	.slides:has(#hero-slide-0:checked) .carousel-dots label[for='hero-slide-0'],
+	.slides:has(#hero-slide-1:checked) .carousel-dots label[for='hero-slide-1'],
+	.slides:has(#hero-slide-2:checked) .carousel-dots label[for='hero-slide-2'],
+	.slides:has(#hero-slide-3:checked) .carousel-dots label[for='hero-slide-3'],
+	.slides:has(#hero-slide-4:checked) .carousel-dots label[for='hero-slide-4'],
+	.slides:has(#hero-slide-5:checked) .carousel-dots label[for='hero-slide-5'],
+	.slides:has(#hero-slide-6:checked) .carousel-dots label[for='hero-slide-6'],
+	.slides:has(#hero-slide-7:checked) .carousel-dots label[for='hero-slide-7'],
+	.slides:has(#hero-slide-8:checked) .carousel-dots label[for='hero-slide-8'],
+	.slides:has(#hero-slide-9:checked) .carousel-dots label[for='hero-slide-9'],
+	.slides:has(#hero-slide-10:checked) .carousel-dots label[for='hero-slide-10'],
+	.slides:has(#hero-slide-11:checked) .carousel-dots label[for='hero-slide-11'],
+	.slides:has(#hero-slide-12:checked) .carousel-dots label[for='hero-slide-12'],
+	.slides:has(#hero-slide-13:checked) .carousel-dots label[for='hero-slide-13'],
+	.slides:has(#hero-slide-14:checked) .carousel-dots label[for='hero-slide-14'] {
 		opacity: 1;
 	}
 
@@ -509,12 +644,12 @@
 		animation-delay: calc(var(--carousel-duration) / var(--items) * 1 * var(--i) * -1);
 	}
 
-	.marquee-carousel-section .marquee-carousel > article:nth-child(1) { --i: 0; }
-	.marquee-carousel-section .marquee-carousel > article:nth-child(2) { --i: 1; }
-	.marquee-carousel-section .marquee-carousel > article:nth-child(3) { --i: 2; }
-	.marquee-carousel-section .marquee-carousel > article:nth-child(4) { --i: 3; }
-	.marquee-carousel-section .marquee-carousel > article:nth-child(5) { --i: 4; }
-	.marquee-carousel-section .marquee-carousel > article:nth-child(6) { --i: 5; }
+	.marquee-carousel-section .marquee-carousel .marquee-card-image-placeholder {
+		width: 100%;
+		height: 200px;
+		min-height: 200px;
+		background: linear-gradient(145deg, #e8e8e8 0%, #d0d0d0 100%);
+	}
 
 	.marquee-carousel-section .marquee-carousel .card-label {
 		display: block;

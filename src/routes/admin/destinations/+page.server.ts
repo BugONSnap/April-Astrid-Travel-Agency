@@ -1,8 +1,12 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { fail, redirect } from "@sveltejs/kit";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
+import {
+	removeStoredDestinationCover,
+	saveDestinationCoverFile,
+} from "$lib/server/destinationCoverUpload";
 
 function optString(v: FormDataEntryValue | null): string | null {
 	if (v == null) return null;
@@ -38,11 +42,22 @@ export const actions: Actions = {
 		const country_name = reqString(data.get("country_name"), "Country name");
 		if (typeof country_name !== "string") return fail(400, { message: country_name.error });
 
+		let image_cover: string | null = null;
+		const fileEntry = data.get("image_cover_file");
+		if (fileEntry instanceof File && fileEntry.size > 0) {
+			try {
+				image_cover = await saveDestinationCoverFile(fileEntry);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : "Could not upload image";
+				return fail(400, { message });
+			}
+		}
+
 		await db.insert(schema.destination).values({
 			country_name,
 			city_name: optString(data.get("city_name")),
 			description: optString(data.get("description")),
-			image_cover: optString(data.get("image_cover")),
+			image_cover,
 		});
 
 		throw redirect(303, "/admin/destinations");
@@ -57,13 +72,33 @@ export const actions: Actions = {
 		const country_name = reqString(data.get("country_name"), "Country name");
 		if (typeof country_name !== "string") return fail(400, { message: country_name.error });
 
+		const currentRows = await db
+			.select({ image_cover: schema.destination.image_cover })
+			.from(schema.destination)
+			.where(eq(schema.destination.destination_id, destinationId))
+			.limit(1);
+		const previousImageCover = currentRows[0]?.image_cover ?? null;
+
+		let image_cover = previousImageCover;
+		const fileEntry = data.get("image_cover_file");
+		if (fileEntry instanceof File && fileEntry.size > 0) {
+			try {
+				const newPath = await saveDestinationCoverFile(fileEntry);
+				await removeStoredDestinationCover(previousImageCover);
+				image_cover = newPath;
+			} catch (err) {
+				const message = err instanceof Error ? err.message : "Could not upload image";
+				return fail(400, { message });
+			}
+		}
+
 		await db
 			.update(schema.destination)
 			.set({
 				country_name,
 				city_name: optString(data.get("city_name")),
 				description: optString(data.get("description")),
-				image_cover: optString(data.get("image_cover")),
+				image_cover,
 			})
 			.where(eq(schema.destination.destination_id, destinationId));
 
@@ -75,6 +110,14 @@ export const actions: Actions = {
 		const destination_idRaw = data.get("destination_id");
 		const destinationId = destination_idRaw ? Number.parseInt(String(destination_idRaw), 10) : NaN;
 		if (!Number.isFinite(destinationId)) return fail(400, { message: "Invalid destination_id" });
+
+		const currentRows = await db
+			.select({ image_cover: schema.destination.image_cover })
+			.from(schema.destination)
+			.where(eq(schema.destination.destination_id, destinationId))
+			.limit(1);
+		const previousImageCover = currentRows[0]?.image_cover ?? null;
+		await removeStoredDestinationCover(previousImageCover);
 
 		await db.delete(schema.destination).where(eq(schema.destination.destination_id, destinationId));
 		throw redirect(303, "/admin/destinations");

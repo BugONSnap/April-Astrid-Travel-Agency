@@ -1,6 +1,9 @@
 <script lang="ts">
+import type { PageProps } from "./$types";
 import Header from "$lib/assets/header.svelte"
 import Footer from "$lib/assets/footer.svelte"
+
+let { data }: PageProps = $props();
 
 /* FILTER STATE */
 
@@ -9,68 +12,39 @@ let continent="All"
 let maxPrice=150000
 let duration="All"
 
-/* PACKAGE DATA */
+/* NOTE
+ * This page should be fully DB-driven (no hardcoded package cards). We re-map the
+ * server payload into the placeholder UI shape below.
+ */
 
-const packages=[
-{
-name:"Japan Cherry Blossom",
-country:"Japan",
-continent:"Asia",
-price:45000,
-duration:7,
-image:"/japan.jpg",
-badge:"HOT"
-},
-{
-name:"Seoul Winter Tour",
-country:"South Korea",
-continent:"Asia",
-price:38000,
-duration:6,
-image:"/korea.jpg",
-badge:"SALE"
-},
-{
-name:"Paris Romantic Escape",
-country:"France",
-continent:"Europe",
-price:95000,
-duration:8,
-image:"/paris.webp",
-badge:"HOT"
-},
-{
-name:"Rome Historic Tour",
-country:"Italy",
-continent:"Europe",
-price:88000,
-duration:7,
-image:"/rome.webp",
-badge:"SALE"
-},
-{
-name:"New York Explorer",
-country:"USA",
-continent:"North America",
-price:120000,
-duration:6,
-image:"/ny.webp",
-badge:"HOT"
-},
-{
-name:"Kenya Safari Adventure",
-country:"Kenya",
-continent:"Africa",
-price:110000,
-duration:9,
-image:"/kenya.webp",
-badge:"HOT"
-}
-]
+/* SERVER DATA MAPPING */
+
+const asiaCountries = new Set((data.destinationsByRegion?.["Asia"] ?? []).map((d: any) => d.country_name));
+const europeCountries = new Set((data.destinationsByRegion?.["Europe"] ?? []).map((d: any) => d.country_name));
+const americaCountries = new Set((data.destinationsByRegion?.["America"] ?? []).map((d: any) => d.country_name));
+
+// Re-map DB data into the UI shape used below.
+const serverPackages = (data.packages ?? []).map((p: any) => {
+	let pkgContinent = "Africa";
+	if (asiaCountries.has(p.destination_country)) pkgContinent = "Asia";
+	else if (europeCountries.has(p.destination_country)) pkgContinent = "Europe";
+	else if (americaCountries.has(p.destination_country)) pkgContinent = "North America";
+
+	return {
+		name: p.package_name,
+		country: p.destination_country,
+		continent: pkgContinent,
+		price: p.price,
+		// If duration is missing, set to a very high number so it won't match duration filters.
+		duration: p.duration_days ?? 9999,
+		image: p.image_url,
+		badge: p.category,
+	};
+});
 
 /* FILTER */
 
-$: filtered=packages.filter(p=>{
+const filtered = $derived(serverPackages.filter((p: any) => {
 
 return(
 (continent==="All"||p.continent===continent) &&
@@ -79,47 +53,38 @@ p.price<=maxPrice &&
 p.name.toLowerCase().includes(search.toLowerCase())
 )
 
-})
+}));
 
 /* NETFLIX SCROLL */
 
-let asiaCarousel:HTMLDivElement
-let europeCarousel:HTMLDivElement
-let americaCarousel:HTMLDivElement
+let asiaCarousel: HTMLDivElement | null = null
+let europeCarousel: HTMLDivElement | null = null
+let americaCarousel: HTMLDivElement | null = null
 
-function scrollLeft(el){
-el.scrollBy({left:-400,behavior:"smooth"})
+function scrollLeft(el: HTMLDivElement | null | undefined) {
+	el?.scrollBy({ left: -400, behavior: "smooth" });
 }
 
-function scrollRight(el){
-el.scrollBy({left:400,behavior:"smooth"})
+function scrollRight(el: HTMLDivElement | null | undefined) {
+	el?.scrollBy({ left: 400, behavior: "smooth" });
 }
 
 /* DESTINATIONS */
 
-const asia=[
-{ name:"Japan", image:"/japan.jpg"},
-{ name:"China", image:"/china.jpg"},
-{ name:"South Korea", image:"/korea.jpg"},
-{ name:"Singapore", image:"/singapore.webp"},
-{ name:"Thailand", image:"/thailand.jpg"},
-{ name:"Vietnam", image:"/vietnam.jpg"}
-]
+const asia = (data.destinationsByRegion?.["Asia"] ?? []).map((d: any) => ({
+	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
+	image: d.image_cover,
+}));
 
-const europe=[
-{ name:"France", image:"/paris.webp"},
-{ name:"Italy", image:"/rome.webp"},
-{ name:"Switzerland", image:"/swiss.webp"},
-{ name:"Spain", image:"/spain.jpg"},
-{ name:"Germany", image:"/germany.jpg"}
-]
+const europe = (data.destinationsByRegion?.["Europe"] ?? []).map((d: any) => ({
+	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
+	image: d.image_cover,
+}));
 
-const america=[
-{ name:"USA", image:"/ny.webp"},
-{ name:"Canada", image:"/canada.jpg"},
-{ name:"Mexico", image:"/mexico.jpg"},
-{ name:"Brazil", image:"/brazil.jpg"}
-]
+const america = (data.destinationsByRegion?.["America"] ?? []).map((d: any) => ({
+	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
+	image: d.image_cover,
+}));
 
 </script>
 
@@ -204,7 +169,10 @@ class="w-full"
 
 <div class="grid xl:grid-cols-3 lg:grid-cols-2 gap-10">
 
-{#each filtered as pkg}
+{#if filtered.length === 0}
+	<div class="col-span-full text-center py-12 text-gray-600">More coming soon</div>
+{:else}
+	{#each filtered as pkg}
 
 <div class="bg-white rounded-2xl shadow hover:shadow-2xl overflow-hidden group transition">
 
@@ -213,6 +181,7 @@ class="w-full"
 <img
 src={pkg.image}
 class="h-56 w-full object-cover group-hover:scale-110 transition"
+alt={pkg.name}
 />
 
 <span class="absolute top-4 left-4 bg-red-600 text-white text-xs px-3 py-1 rounded-full">
@@ -228,7 +197,7 @@ class="h-56 w-full object-cover group-hover:scale-110 transition"
 </h3>
 
 <p class="text-gray-500 text-sm">
-{pkg.country} • {pkg.duration} Days
+{pkg.country} • {pkg.duration >= 9999 ? "—" : pkg.duration} Days
 </p>
 
 <div class="flex justify-between items-center mt-4">
@@ -247,7 +216,8 @@ View Deal
 
 </div>
 
-{/each}
+	{/each}
+{/if}
 
 </div>
 
@@ -263,9 +233,14 @@ View Deal
 Asia Destinations
 </h2>
 
+{#if asia.length === 0}
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
+{:else}
 <div class="relative">
 
-<button on:click={()=>scrollLeft(asiaCarousel)} class="carousel-btn left">‹</button>
+<button on:click={()=>scrollLeft(asiaCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
 
 <div bind:this={asiaCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
 
@@ -273,7 +248,7 @@ Asia Destinations
 
 <div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
 
-<img src={d.image} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
+<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
 
 <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
 
@@ -289,9 +264,10 @@ Asia Destinations
 
 </div>
 
-<button on:click={()=>scrollRight(asiaCarousel)} class="carousel-btn right">›</button>
+<button on:click={()=>scrollRight(asiaCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
 
 </div>
+{/if}
 
 </section>
 
@@ -305,9 +281,14 @@ Asia Destinations
 Europe Destinations
 </h2>
 
+{#if europe.length === 0}
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
+{:else}
 <div class="relative">
 
-<button on:click={()=>scrollLeft(europeCarousel)} class="carousel-btn left">‹</button>
+<button on:click={()=>scrollLeft(europeCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
 
 <div bind:this={europeCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
 
@@ -315,7 +296,7 @@ Europe Destinations
 
 <div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
 
-<img src={d.image} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
+<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
 
 <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
 
@@ -331,9 +312,10 @@ Europe Destinations
 
 </div>
 
-<button on:click={()=>scrollRight(europeCarousel)} class="carousel-btn right">›</button>
+<button on:click={()=>scrollRight(europeCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
 
 </div>
+{/if}
 
 </section>
 
@@ -347,9 +329,14 @@ Europe Destinations
 America Destinations
 </h2>
 
+{#if america.length === 0}
+	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
+		More coming soon
+	</div>
+{:else}
 <div class="relative">
 
-<button on:click={()=>scrollLeft(americaCarousel)} class="carousel-btn left">‹</button>
+<button on:click={()=>scrollLeft(americaCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
 
 <div bind:this={americaCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
 
@@ -357,7 +344,7 @@ America Destinations
 
 <div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
 
-<img src={d.image} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
+<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
 
 <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
 
@@ -373,9 +360,10 @@ America Destinations
 
 </div>
 
-<button on:click={()=>scrollRight(americaCarousel)} class="carousel-btn right">›</button>
+<button on:click={()=>scrollRight(americaCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
 
 </div>
+{/if}
 
 </section>
 
@@ -383,26 +371,3 @@ America Destinations
 <Footer/>
 
 
-<style>
-
-.carousel-btn{
-position:absolute;
-top:40%;
-background:white;
-border-radius:50%;
-width:40px;
-height:40px;
-box-shadow:0 4px 10px rgba(0,0,0,0.2);
-cursor:pointer;
-z-index:5;
-}
-
-.left{
-left:-20px;
-}
-
-.right{
-right:-20px;
-}
-
-</style>

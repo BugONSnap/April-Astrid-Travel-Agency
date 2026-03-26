@@ -2,27 +2,57 @@
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 
-	let conversations: any[] = [];
-	let selected: any = null;
-	let messages: any[] = [];
+	let conversations: Array<{
+		conversation_id: number;
+		user_id: number;
+		first_name: string | null;
+		last_name: string | null;
+	}> = [];
+	let selected: (typeof conversations)[0] | null = null;
+	let messages: Array<{ sender_id: number; message_text: string }> = [];
 	let input = "";
+	let loadError = "";
 
-	// Logged-in admin id (provided by `/admin/+layout.server.ts`)
 	let adminId = 0;
 	$: adminId = ($page.data.user?.user_id as number | undefined) ?? 0;
 
-	async function loadConversations() {
-		const res = await fetch("/api/auth/chat?scope=conversations");
-		conversations = await res.json();
+	function displayName(c: (typeof conversations)[0]) {
+		const n = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
+		return n || `User #${c.user_id}`;
 	}
 
-	async function openChat(conv: any) {
-		selected = conv;
+	async function loadConversations() {
+		loadError = "";
+		try {
+			const res = await fetch("/api/auth/chat?scope=conversations");
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				loadError = typeof err.error === "string" ? err.error : `Could not load inbox (${res.status})`;
+				conversations = [];
+				return;
+			}
+			const data = await res.json();
+			conversations = Array.isArray(data) ? data : [];
+		} catch {
+			loadError = "Network error loading conversations.";
+			conversations = [];
+		}
+	}
 
-		const res = await fetch(
-			`/api/auth/chat?scope=messages&conversationId=${conv.conversation_id}`,
-		);
-		messages = await res.json();
+	async function openChat(conv: (typeof conversations)[0]) {
+		selected = conv;
+		try {
+			const res = await fetch(
+				`/api/auth/chat?scope=messages&conversationId=${conv.conversation_id}`,
+			);
+			if (!res.ok) {
+				messages = [];
+				return;
+			}
+			messages = await res.json();
+		} catch {
+			messages = [];
+		}
 	}
 
 	async function send() {
@@ -34,7 +64,7 @@
 			body: JSON.stringify({
 				conversationId: selected.conversation_id,
 				senderId: adminId,
-				text: input,
+				text: input.trim(),
 			}),
 		});
 
@@ -44,50 +74,81 @@
 
 	onMount(loadConversations);
 </script>
-    
-    <div class="flex min-h-[70vh]">
-    
-    <!-- LEFT: USERS -->
-    <div class="w-1/3 bg-white border-r p-3">
-    <h2 class="font-bold mb-3">Inbox</h2>
-    
-    {#each conversations as c}
-    <button
-    type="button"
-    class="w-full text-left p-2 border-b cursor-pointer hover:bg-gray-100"
-    on:click={() => openChat(c)}
-    >
-    {c.first_name ? `${c.first_name} ${c.last_name ?? ""}`.trim() : `User #${c.user_id}`}
-    </button>
-    {/each}
-    </div>
-    
-    <!-- RIGHT: CHAT -->
-    <div class="flex-1 flex flex-col">
-    
-    <div class="p-4 bg-red-700 text-white font-bold">
-    {selected ? `Chat with User ${selected.user_id}` : "Select a chat"}
-    </div>
-    
-    <div class="flex-1 overflow-y-auto p-4 space-y-2">
-    {#each messages as m}
-    <div class={`max-w-xs p-2 rounded-lg
-    ${m.sender_id === adminId ? "bg-red-500 text-white ml-auto" : "bg-white"}`}>
-    {m.message_text}
-    </div>
-    {/each}
-    </div>
-    
-    <div class="p-3 flex gap-2 border-t">
-    <input
-    class="flex-1 p-2 border rounded-lg"
-    bind:value={input}
-    placeholder="Reply..."
-    />
-    <button on:click={send} class="bg-red-700 text-white px-4 rounded-lg">
-    Send
-    </button>
-    </div>
-    
-    </div>
-    </div>
+
+<svelte:head>
+	<title>Admin · Support inbox</title>
+</svelte:head>
+
+<div class="ap-page ap-stack">
+	<header class="ap-page-head">
+		<div>
+			<p class="ap-kicker">Messaging</p>
+			<h1 class="ap-title">Support inbox</h1>
+			<p class="ap-sub">Open a thread on the left (or top on mobile), then reply. Messages refresh after each send.</p>
+		</div>
+		<a href="/admin" class="ap-back">← Dashboard</a>
+	</header>
+
+	{#if loadError}
+		<p class="ap-card ap-empty" role="alert">{loadError}</p>
+	{/if}
+
+	<div class="ap-chat">
+		<div class="ap-chat-inbox">
+			<h2 class="ap-chat-inbox-title">Inbox</h2>
+			{#if conversations.length === 0 && !loadError}
+				<p class="ap-chat-empty">No conversations yet.</p>
+			{/if}
+			{#each conversations as c}
+				<button
+					type="button"
+					class="ap-chat-thread-btn"
+					class:ap-chat-thread-btn--active={selected?.conversation_id === c.conversation_id}
+					onclick={() => openChat(c)}
+				>
+					{displayName(c)}
+					<span class="ap-muted" style="display: block; margin-top: 0.25rem;">User #{c.user_id}</span>
+				</button>
+			{/each}
+		</div>
+
+		<div class="ap-chat-main">
+			<div class="ap-chat-banner">
+				{selected ? `Thread · ${displayName(selected)}` : "Select a conversation"}
+			</div>
+			<div class="ap-chat-messages">
+				{#each messages as m}
+					<div
+						class="ap-chat-bubble"
+						class:ap-chat-bubble--me={adminId !== 0 && m.sender_id === adminId}
+						class:ap-chat-bubble--them={adminId === 0 || m.sender_id !== adminId}
+					>
+						{m.message_text}
+					</div>
+				{/each}
+			</div>
+			<div class="ap-chat-input-row">
+				<input
+					class="ap-input ap-chat-input"
+					bind:value={input}
+					placeholder={selected ? "Type a reply…" : "Select a thread first"}
+					disabled={!selected}
+					onkeydown={(e) => {
+						if (e.key === "Enter" && !e.shiftKey) {
+							e.preventDefault();
+							send();
+						}
+					}}
+				/>
+				<button
+					type="button"
+					class="ap-btn ap-btn--primary"
+					onclick={send}
+					disabled={!selected || !input.trim()}
+				>
+					Send
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
