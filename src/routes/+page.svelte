@@ -99,7 +99,7 @@
 		</ul>
 	</div>
 	<div class="hero-overlay">
-		<h1 class="hero-title">Explore Philippines</h1>
+		<h1 class="hero-title">Explore</h1>
 		<p class="hero-tagline">We plan, you pack</p>
 	</div>
 </section>

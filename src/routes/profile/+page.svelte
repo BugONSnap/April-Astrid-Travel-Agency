@@ -44,29 +44,43 @@ function onAvatarPicked(e: Event) {
 }
 
 // BOOKINGS DATA
-let bookings = [
-{
-title: "Greece, Santorini",
-package: "Greece Star Package",
-destination: "Santorini",
-date: "March 19 - 20, 2026",
-people: 3,
-price: "$3500",
-status: "Scheduled"
-},
-{
-title: "Japan, Tokyo",
-package: "Sakura Tour",
-destination: "Tokyo",
-date: "April 10 - 15, 2026",
-people: 2,
-price: "$2800",
-status: "Scheduled"
-}
-]
-
 let filter = $state("All")
 let search = $state("")
+
+function fmtMoney(n: number) {
+	try {
+		return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(n)
+	} catch {
+		return `$${n}`
+	}
+}
+
+function fmtDate(d: any) {
+	if (!d) return "—"
+	const dt = d instanceof Date ? d : new Date(d)
+	if (Number.isNaN(dt.getTime())) return "—"
+	return dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" })
+}
+
+const filteredBookings = $derived(() => {
+	const q = search.trim().toLowerCase()
+	const base = data.bookings ?? []
+	return base.filter((b: any) => {
+		const matchesSearch =
+			!q ||
+			String(b.title ?? "").toLowerCase().includes(q) ||
+			String(b.package_name ?? "").toLowerCase().includes(q) ||
+			String(b.destination ?? "").toLowerCase().includes(q)
+
+		if (!matchesSearch) return false
+
+		if (filter === "All") return true
+		if (filter === "Scheduled") return b.booking_status === "CONFIRMED" || b.booking_status === "PENDING"
+		if (filter === "New") return b.booking_status === "PENDING"
+		if (filter === "Old") return b.booking_status === "COMPLETED" || b.booking_status === "CANCELLED"
+		return true
+	})
+})
 </script>
 
 <Header />
@@ -107,10 +121,10 @@ onclick={() => {
 
 <div class="profile-card">
 
-{#if form?.message}
+{#if form?.message && (form as any).action === "updateProfile"}
 <p class="form-msg form-msg-error" role="alert">{form.message}</p>
 {/if}
-{#if form?.success}
+{#if form?.success && (form as any).action === "updateProfile"}
 <p class="form-msg form-msg-ok" role="status">Profile saved.</p>
 {/if}
 
@@ -197,27 +211,179 @@ onclick={() => {
 
 <div class="booking-list">
 
-{#each bookings as b}
+{#if filteredBookings().length === 0}
+<div class="booking-card">
+	<p style="margin:0; color:#666; font-weight:600;">Nothing here yet.</p>
+	<p style="margin:6px 0 0; color:#888;">When you book a trip, it will show up in this list.</p>
+</div>
+{:else}
+{#each filteredBookings() as b}
 <div class="booking-card">
 
 <div class="booking-header">
 <h3>{b.title}</h3>
-<span class="status">{b.status}</span>
+<span class="status">{b.booking_status}</span>
 </div>
 
 <div class="booking-body">
-<p><b>Package:</b> {b.package}</p>
+<p><b>Package:</b> {b.package_name}</p>
 <p><b>Destination/s:</b> {b.destination}</p>
-<p><b>Date:</b> {b.date}</p>
-<p><b>People in total:</b> {b.people}</p>
-<p><b>Price Total:</b> {b.price}</p>
+<p><b>Booked:</b> {fmtDate(b.booking_date)} · <b>Travel:</b> {fmtDate(b.travel_date)}</p>
+<p><b>People in total:</b> {b.number_of_people}</p>
+<p><b>Price Total:</b> {fmtMoney(b.total_price)}</p>
+<p><b>Payment:</b> {b.payment_status}</p>
 </div>
 
 </div>
 {/each}
+{/if}
 
 </div>
 
+{/if}
+
+<!-- ================= SAVED TOURS ================= -->
+{#if selectedMenu === 2}
+<div class="page-title">Saved Tours</div>
+<div class="booking-list">
+	{#if (data.savedTours ?? []).length === 0}
+		<div class="booking-card">
+			<p style="margin:0; color:#666; font-weight:600;">Nothing saved yet.</p>
+			<p style="margin:6px 0 0; color:#888;">Save packages from “Explore” to keep them here.</p>
+		</div>
+	{:else}
+		{#each data.savedTours as t (t.bookmark_id)}
+			<div class="booking-card">
+				<div class="booking-header">
+					<h3>{t.package_name}</h3>
+					<form method="post" action="?/removeBookmark" use:enhance>
+						<input type="hidden" name="bookmark_id" value={t.bookmark_id} />
+						<button type="submit" class="book-btn" style="background:#555;">Remove</button>
+					</form>
+				</div>
+				<div class="booking-body">
+					<p><b>Destination:</b> {t.destination_city ? `${t.destination_country}, ${t.destination_city}` : t.destination_country}</p>
+					<p><b>Category:</b> {t.category} · <b>Price:</b> {fmtMoney(t.price)}</p>
+					<p><b>Saved:</b> {fmtDate(t.created_at)}</p>
+				</div>
+			</div>
+		{/each}
+	{/if}
+</div>
+{/if}
+
+<!-- ================= PAYMENTS ================= -->
+{#if selectedMenu === 3}
+<div class="page-title">Payments</div>
+<div class="booking-list">
+	{#if (data.paymentsDue ?? []).length === 0}
+		<div class="booking-card">
+			<p style="margin:0; color:#666; font-weight:600;">Nothing to pay right now.</p>
+			<p style="margin:6px 0 0; color:#888;">Unpaid bookings will appear here.</p>
+		</div>
+	{:else}
+		{#each data.paymentsDue as p (p.booking_id)}
+			<div class="booking-card">
+				<div class="booking-header">
+					<h3>{p.package_name}</h3>
+					<span class="status" style="background:#f59e0b;">UNPAID</span>
+				</div>
+				<div class="booking-body">
+					<p><b>Destination:</b> {p.destination_city ? `${p.destination_country}, ${p.destination_city}` : p.destination_country}</p>
+					<p><b>Travel:</b> {fmtDate(p.travel_date)}</p>
+					<p><b>Amount due:</b> {fmtMoney(p.total_price)}</p>
+					<form method="post" action="?/makePayment" use:enhance class="ap-inline-form" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+						<input type="hidden" name="booking_id" value={p.booking_id} />
+						<input name="payment_method" placeholder="Payment method (e.g. GCash)" style="padding:8px; border-radius:10px; border:1px solid #ddd;" />
+						<input name="transaction_reference" placeholder="Reference (optional)" style="padding:8px; border-radius:10px; border:1px solid #ddd;" />
+						<button type="submit" class="book-btn">Mark as Paid</button>
+					</form>
+					{#if form?.message && (form as any).action === "makePayment"}
+						<p class="form-msg form-msg-error" role="alert" style="margin-top:10px;">{form.message}</p>
+					{/if}
+				</div>
+			</div>
+		{/each}
+	{/if}
+</div>
+{/if}
+
+<!-- ================= PAYMENT HISTORY ================= -->
+{#if selectedMenu === 4}
+<div class="page-title">Payment History</div>
+<div class="booking-list">
+	{#if (data.paymentHistory ?? []).length === 0}
+		<div class="booking-card">
+			<p style="margin:0; color:#666; font-weight:600;">No payments yet.</p>
+		</div>
+	{:else}
+		{#each data.paymentHistory as h (h.payment_id)}
+			<div class="booking-card">
+				<div class="booking-header">
+					<h3>{h.package_name}</h3>
+					<span class="status">{h.payment_status}</span>
+				</div>
+				<div class="booking-body">
+					<p><b>Destination:</b> {h.destination_city ? `${h.destination_country}, ${h.destination_city}` : h.destination_country}</p>
+					<p><b>Amount:</b> {fmtMoney(h.amount)} · <b>Date:</b> {fmtDate(h.payment_date)}</p>
+					<p><b>Method:</b> {h.payment_method ?? "—"} · <b>Reference:</b> {h.transaction_reference ?? "—"}</p>
+				</div>
+			</div>
+		{/each}
+	{/if}
+</div>
+{/if}
+
+<!-- ================= ACCOUNT SETTINGS ================= -->
+{#if selectedMenu === 5}
+<div class="page-title">Account Settings</div>
+<div class="profile-card">
+	<h2 style="margin:0 0 12px; font-size:1.1rem; font-weight:800;">Change password</h2>
+	<form method="post" action="?/changePassword" use:enhance class="profile-form">
+		<div class="grid">
+			<input name="current_password" type="password" placeholder="Current password" required />
+			<input name="new_password" type="password" placeholder="New password (min 8 chars)" required minlength="8" />
+			<input name="confirm_password" type="password" placeholder="Confirm new password" required minlength="8" />
+		</div>
+		<div style="margin-top:12px; display:flex; gap:10px; align-items:center; justify-content:flex-end;">
+			<button class="save-btn" type="submit">Update password</button>
+		</div>
+		{#if form?.message && (form as any).action === "changePassword"}
+			<p class="form-msg form-msg-error" role="alert" style="margin-top:12px;">{form.message}</p>
+		{/if}
+		{#if form?.success && (form as any).action === "changePassword"}
+			<p class="form-msg form-msg-ok" role="status" style="margin-top:12px;">Password updated.</p>
+		{/if}
+	</form>
+</div>
+{/if}
+
+<!-- ================= EXPLORE ================= -->
+{#if selectedMenu === 6}
+<div class="page-title">Explore</div>
+<div class="booking-list">
+	{#if (data.explore ?? []).length === 0}
+		<div class="booking-card">
+			<p style="margin:0; color:#666; font-weight:600;">No recommendations right now.</p>
+		</div>
+	{:else}
+		{#each data.explore as p (p.package_id)}
+			<div class="booking-card">
+				<div class="booking-header">
+					<h3>{p.package_name}</h3>
+					<form method="post" action="?/addBookmark" use:enhance>
+						<input type="hidden" name="package_id" value={p.package_id} />
+						<button type="submit" class="book-btn">Save</button>
+					</form>
+				</div>
+				<div class="booking-body">
+					<p><b>Destination:</b> {p.destination_city ? `${p.destination_country}, ${p.destination_city}` : p.destination_country}</p>
+					<p><b>Category:</b> {p.category} · <b>Price:</b> {fmtMoney(p.price)} · <b>Duration:</b> {p.duration_days ?? "—"} days</p>
+				</div>
+			</div>
+		{/each}
+	{/if}
+</div>
 {/if}
 
 </div>

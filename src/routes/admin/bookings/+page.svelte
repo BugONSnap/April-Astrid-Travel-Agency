@@ -8,7 +8,7 @@
 	<title>Admin · Bookings</title>
 </svelte:head>
 
-<div class="ap-page ap-stack">
+<div class="ap-page ap-stack admin-red">
 	<header class="ap-page-head">
 		<div>
 			<p class="ap-kicker">Operations</p>
@@ -54,8 +54,12 @@
 								</td>
 								<td>
 									<div>{b.travel_date ? new Date(b.travel_date).toLocaleDateString() : "—"}</div>
-									<div class="ap-muted">Book: {b.booking_status}</div>
-									<div class="ap-muted">Pay: {b.payment_status}</div>
+									<div class="ap-muted">
+										Book: <span class="pill pill--book">{b.booking_status}</span>
+									</div>
+									<div class="ap-muted">
+										Pay: <span class="pill pill--pay">{b.payment_status}</span>
+									</div>
 								</td>
 								<td>
 									{b.number_of_people} pax
@@ -81,7 +85,7 @@
 											</select>
 										</div>
 										<div class="ap-form-actions ap-span-2">
-											<button type="submit" class="ap-btn ap-btn--secondary ap-btn--block">Apply</button>
+											<button type="submit" class="ap-btn ap-btn--secondary ap-btn--block ap-btn--red">Apply</button>
 										</div>
 									</form>
 								</td>
@@ -93,3 +97,53 @@
 		{/if}
 	</section>
 </div>
+
+<style>
+	.admin-red.ap-page {
+		background:
+			radial-gradient(1100px 420px at 12% -12%, rgba(196, 30, 58, 0.18), transparent 60%),
+			linear-gradient(180deg, #fbfbfd 0%, #f7f4f6 100%);
+		min-height: 100vh;
+	}
+
+	.admin-red .ap-card {
+		border: 1px solid rgba(196, 30, 58, 0.10);
+		box-shadow: 0 18px 60px rgba(15, 15, 20, 0.10);
+	}
+
+	.admin-red .ap-table thead th {
+		background: rgba(196, 30, 58, 0.06);
+	}
+
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 999px;
+		padding: 0.15rem 0.5rem;
+		font-weight: 800;
+		font-size: 0.75rem;
+		border: 1px solid rgba(0, 0, 0, 0.10);
+		background: rgba(255, 255, 255, 0.7);
+	}
+
+	.pill--book {
+		border-color: rgba(196, 30, 58, 0.24);
+		background: rgba(196, 30, 58, 0.10);
+		color: #8f0e24;
+	}
+
+	.pill--pay {
+		border-color: rgba(15, 118, 110, 0.22);
+		background: rgba(15, 118, 110, 0.10);
+		color: #0b5e57;
+	}
+
+	/* Accent button (keeps existing ap button styles) */
+	.admin-red :global(.ap-btn--red) {
+		border-color: rgba(196, 30, 58, 0.30) !important;
+		background: rgba(196, 30, 58, 0.10) !important;
+	}
+	.admin-red :global(.ap-btn--red:hover) {
+		background: rgba(196, 30, 58, 0.14) !important;
+	}
+</style>

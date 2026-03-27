@@ -106,7 +106,3 @@
 		</nav>
 	{/if}
 </div>
-
-<style>
-	/* No custom CSS needed, all handled by Tailwind. */
-</style>

@@ -5,6 +5,49 @@
 
 	let createUploadBusy = $state(false);
 	let updateUploadBusy = $state<Record<number, boolean>>({});
+	let createFromDestinationId = $state<number | "">("");
+	let createToDestinationId = $state<number | "">("");
+	let createPackageName = $state("");
+	let createNameTouched = $state(false);
+	let createTripType = $state<"single" | "route">("single");
+
+	function destLabelById(id: number | "" | null | undefined) {
+		if (!id) return "";
+		const d = data.destinations.find((x) => x.destination_id === id);
+		if (!d) return "";
+		return `${d.country_name}${d.city_name ? ` — ${d.city_name}` : ""}`;
+	}
+
+	$effect(() => {
+		if (createNameTouched) return;
+		if (!createToDestinationId) return;
+		const to = destLabelById(createToDestinationId);
+		if (!to) return;
+
+		if (createTripType === "single") {
+			createPackageName = to;
+			return;
+		}
+
+		if (!createFromDestinationId) return;
+		const from = destLabelById(createFromDestinationId);
+		if (!from) return;
+		createPackageName = `${from} → ${to}`;
+	});
+
+	$effect(() => {
+		// Default "To" to the first destination so the form stays valid.
+		if (createToDestinationId !== "") return;
+		const first = data.destinations[0]?.destination_id;
+		if (typeof first === "number") createToDestinationId = first;
+	});
+
+	$effect(() => {
+		// If they switch mode and haven't typed a name, recompute name.
+		if (createNameTouched) return;
+		// Nudge the name effect to run by clearing the name.
+		createPackageName = "";
+	});
 
 	function imagesText(packageId: number) {
 		return data.packageImages
@@ -81,7 +124,7 @@
 	<title>Admin · Packages</title>
 </svelte:head>
 
-<div class="ap-page ap-stack">
+<div class="ap-page ap-stack admin-red">
 	<header class="ap-page-head">
 		<div>
 			<p class="ap-kicker">Catalog</p>
@@ -101,19 +144,86 @@
 		{:else}
 			<form method="post" action="?/createPackage" class="ap-form-grid" onsubmit={onCreateSubmit}>
 				<div class="ap-field ap-span-2">
+					<label class="ap-label" for="pk-type">Package type</label>
+					<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+						<button
+							type="button"
+							class="ap-btn ap-btn--secondary ap-btn--sm"
+							style={createTripType === "single" ? "background: rgba(196, 30, 58, 0.12); border-color: rgba(196, 30, 58, 0.35);" : ""}
+							onclick={() => {
+								createTripType = "single";
+								if (!createNameTouched) createPackageName = "";
+							}}
+						>
+							Single-country
+						</button>
+						<button
+							type="button"
+							class="ap-btn ap-btn--secondary ap-btn--sm"
+							style={createTripType === "route" ? "background: rgba(196, 30, 58, 0.12); border-color: rgba(196, 30, 58, 0.35);" : ""}
+							onclick={() => {
+								createTripType = "route";
+								if (!createNameTouched) createPackageName = "";
+							}}
+						>
+							Multi-country (From → To)
+						</button>
+					</div>
+					<input id="pk-type" class="sr-only" tabindex="-1" aria-hidden="true" />
+					<p class="ap-muted" style="margin-top:0.4rem;">
+						Single-country uses one destination. Multi-country uses From + To and auto-generates the name.
+					</p>
+				</div>
+				<div class="ap-field ap-span-2">
 					<label class="ap-label" for="pk-name">Package name</label>
-					<input id="pk-name" name="package_name" class="ap-input" required />
+					<input
+						id="pk-name"
+						name="package_name"
+						class="ap-input"
+						required
+						bind:value={createPackageName}
+						oninput={() => (createNameTouched = true)}
+					/>
 				</div>
-				<div class="ap-field">
-					<label class="ap-label" for="pk-dest">Destination</label>
-					<select id="pk-dest" name="destination_id" class="ap-select" required>
-						{#each data.destinations as d}
-							<option value={d.destination_id}>
-								{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
-							</option>
-						{/each}
-					</select>
-				</div>
+				{#if createTripType === "route"}
+					<div class="ap-field">
+						<label class="ap-label" for="pk-from">From</label>
+						<select id="pk-from" class="ap-select" bind:value={createFromDestinationId}>
+							{#each data.destinations as d}
+								<option value={d.destination_id}>
+									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
+								</option>
+							{/each}
+						</select>
+					</div>
+					<div class="ap-field">
+						<label class="ap-label" for="pk-to">To</label>
+						<select id="pk-to" name="destination_id" class="ap-select" required bind:value={createToDestinationId}>
+							{#each data.destinations as d}
+								<option value={d.destination_id}>
+									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
+								</option>
+							{/each}
+						</select>
+						<p class="ap-muted" style="margin-top:0.4rem;">
+							Picks auto-generate the name like <strong>{createFromDestinationId && createToDestinationId ? `${destLabelById(createFromDestinationId)} → ${destLabelById(createToDestinationId)}` : "Thailand → Singapore"}</strong>.
+						</p>
+					</div>
+				{:else}
+					<div class="ap-field ap-span-2">
+						<label class="ap-label" for="pk-to-single">Destination</label>
+						<select id="pk-to-single" name="destination_id" class="ap-select" required bind:value={createToDestinationId}>
+							{#each data.destinations as d}
+								<option value={d.destination_id}>
+									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
+								</option>
+							{/each}
+						</select>
+						<p class="ap-muted" style="margin-top:0.4rem;">
+							Auto-name example: <strong>{createToDestinationId ? destLabelById(createToDestinationId) : "Thailand"}</strong>.
+						</p>
+					</div>
+				{/if}
 				<div class="ap-field">
 					<label class="ap-label" for="pk-cat">Category</label>
 					<select id="pk-cat" name="category" class="ap-select" required>
@@ -304,6 +414,46 @@
 </div>
 
 <style>
+	.admin-red.ap-page {
+		background:
+			radial-gradient(1100px 420px at 12% -12%, rgba(196, 30, 58, 0.18), transparent 60%),
+			radial-gradient(900px 500px at 90% 0%, rgba(196, 30, 58, 0.10), transparent 55%),
+			linear-gradient(180deg, #fbfbfd 0%, #f7f4f6 100%);
+		min-height: 100vh;
+	}
+
+	.admin-red :global(.ap-card) {
+		border: 1px solid rgba(196, 30, 58, 0.10);
+		box-shadow: 0 18px 60px rgba(15, 15, 20, 0.10);
+	}
+
+	.admin-red :global(.ap-title) {
+		position: relative;
+	}
+	.admin-red :global(.ap-title)::after {
+		content: "";
+		display: block;
+		width: 92px;
+		height: 4px;
+		margin-top: 10px;
+		border-radius: 999px;
+		background: linear-gradient(90deg, rgba(196, 30, 58, 0.95), rgba(196, 30, 58, 0.18));
+	}
+
+	.admin-red :global(.ap-btn--primary) {
+		background: #c41e3a !important;
+		border-color: #c41e3a !important;
+	}
+	.admin-red :global(.ap-btn--primary:hover) {
+		filter: brightness(0.96);
+	}
+
+	.admin-red :global(.ap-badge) {
+		border-color: rgba(196, 30, 58, 0.30) !important;
+		background: rgba(196, 30, 58, 0.10) !important;
+		color: #8f0e24 !important;
+	}
+
 	.ap-page-actions {
 		display: flex;
 		flex-direction: column;
@@ -323,6 +473,6 @@
 		font-size: 1.125rem;
 		font-weight: 700;
 		margin: 0 0 0.35rem;
-		color: #0a0a0a;
+		color: #111;
 	}
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from "$app/navigation";
 
 	type Tab = 'login' | 'register';
 
@@ -51,6 +51,9 @@
 				formError = typeof data.message === 'string' ? data.message : 'Login failed';
 				return;
 			}
+			// Cookie was set by the API route; refresh root layout auth data
+			// so the header updates without a hard reload.
+			await invalidate("app:auth");
 			const role = data?.user?.role as string | undefined;
 			if (role === 'ADMIN' || role === 'SUPERADMIN') {
 				await goto('/admin');
@@ -178,6 +181,8 @@
 					typeof data.message === 'string' ? data.message : 'Registration failed';
 				return;
 			}
+			// Same as login: ensure header/user UI updates immediately.
+			await invalidate("app:auth");
 			const role = data?.user?.role as string | undefined;
 			if (role === 'ADMIN' || role === 'SUPERADMIN') {
 				await goto('/admin');
