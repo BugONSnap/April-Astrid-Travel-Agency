@@ -3,11 +3,77 @@
 
 	let { data }: PageProps = $props();
 
+	let createUploadBusy = $state(false);
+	let updateUploadBusy = $state<Record<number, boolean>>({});
+
 	function imagesText(packageId: number) {
 		return data.packageImages
 			.filter((pi) => pi.package_id === packageId)
 			.map((pi) => pi.image_url)
 			.join("\n");
+	}
+
+	async function uploadFiles(files: FileList | null, folder: string) {
+		if (!files || files.length === 0) return [];
+		const urls: string[] = [];
+		for (const file of Array.from(files)) {
+			const formData = new FormData();
+			formData.append("file", file);
+			formData.append("folder", folder);
+			const res = await fetch("/api/upload", { method: "POST", body: formData });
+			const payload = await res.json();
+			if (!res.ok) throw new Error(payload?.error ?? "Upload failed");
+			if (payload?.secure_url) urls.push(payload.secure_url);
+		}
+		return urls;
+	}
+
+	async function onCreateSubmit(e: SubmitEvent) {
+		const form = e.currentTarget as HTMLFormElement;
+		const input = form.querySelector<HTMLInputElement>('input[name="image_files"]');
+		if (!input) return;
+		if (!input.files || input.files.length === 0) return;
+
+		e.preventDefault();
+		createUploadBusy = true;
+		try {
+			const urls = await uploadFiles(input.files, "travel-agency/packages");
+			const textarea = form.querySelector<HTMLTextAreaElement>('textarea[name="image_urls"]');
+			if (textarea) {
+				const existing = textarea.value.trim();
+				textarea.value = [existing, ...urls].filter(Boolean).join(existing ? "\n" : "");
+			}
+			input.value = "";
+			form.requestSubmit();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "Upload failed");
+		} finally {
+			createUploadBusy = false;
+		}
+	}
+
+	async function onUpdateSubmit(packageId: number, e: SubmitEvent) {
+		const form = e.currentTarget as HTMLFormElement;
+		const input = form.querySelector<HTMLInputElement>('input[name="image_files"]');
+		if (!input) return;
+		if (!input.files || input.files.length === 0) return;
+
+		e.preventDefault();
+		updateUploadBusy = { ...updateUploadBusy, [packageId]: true };
+		try {
+			const urls = await uploadFiles(input.files, `travel-agency/packages/${packageId}`);
+			const textarea = form.querySelector<HTMLTextAreaElement>('textarea[name="image_urls"]');
+			if (textarea) {
+				const existing = textarea.value.trim();
+				textarea.value = [existing, ...urls].filter(Boolean).join(existing ? "\n" : "");
+			}
+			input.value = "";
+			form.requestSubmit();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "Upload failed");
+		} finally {
+			updateUploadBusy = { ...updateUploadBusy, [packageId]: false };
+		}
 	}
 </script>
 
@@ -33,7 +99,7 @@
 		{#if data.destinations.length === 0}
 			<p class="ap-empty">Add at least one destination before creating a package.</p>
 		{:else}
-			<form method="post" action="?/createPackage" class="ap-form-grid">
+			<form method="post" action="?/createPackage" class="ap-form-grid" onsubmit={onCreateSubmit}>
 				<div class="ap-field ap-span-2">
 					<label class="ap-label" for="pk-name">Package name</label>
 					<input id="pk-name" name="package_name" class="ap-input" required />
@@ -85,6 +151,11 @@
 					<textarea id="pk-exc" name="exclusions" class="ap-textarea" placeholder="Optional"></textarea>
 				</div>
 				<div class="ap-field ap-span-2">
+					<label class="ap-label" for="pk-files">Upload images (optional)</label>
+					<input id="pk-files" name="image_files" type="file" class="ap-input" accept="image/*" multiple />
+					<p class="ap-muted">Selected files will be uploaded to Cloudinary and appended into “Image URLs”.</p>
+				</div>
+				<div class="ap-field ap-span-2">
 					<label class="ap-label" for="pk-imgs">Image URLs</label>
 					<textarea
 						id="pk-imgs"
@@ -94,7 +165,9 @@
 					></textarea>
 				</div>
 				<div class="ap-form-actions ap-span-2">
-					<button type="submit" class="ap-btn ap-btn--primary">Create package</button>
+					<button type="submit" class="ap-btn ap-btn--primary" disabled={createUploadBusy}>
+						{createUploadBusy ? "Uploading…" : "Create package"}
+					</button>
 				</div>
 			</form>
 		{/if}
@@ -121,7 +194,7 @@
 							<span class="ap-muted">ID #{p.package_id}</span>
 						</div>
 
-						<form method="post" action="?/updatePackage" class="ap-form-grid">
+						<form method="post" action="?/updatePackage" class="ap-form-grid" onsubmit={(e) => onUpdateSubmit(p.package_id, e)}>
 							<input type="hidden" name="package_id" value={p.package_id} />
 							<div class="ap-field ap-span-2">
 								<label class="ap-label" for={`pn-${p.package_id}`}>Name</label>
@@ -187,11 +260,25 @@
 								<textarea id={`px-${p.package_id}`} name="exclusions" class="ap-textarea">{p.exclusions ?? ""}</textarea>
 							</div>
 							<div class="ap-field ap-span-2">
+								<label class="ap-label" for={`pf-${p.package_id}`}>Upload images (optional)</label>
+								<input
+									id={`pf-${p.package_id}`}
+									name="image_files"
+									type="file"
+									class="ap-input"
+									accept="image/*"
+									multiple
+								/>
+								<p class="ap-muted">Selected files will be uploaded and appended into “Image URLs”.</p>
+							</div>
+							<div class="ap-field ap-span-2">
 								<label class="ap-label" for={`pg-${p.package_id}`}>Image URLs</label>
 								<textarea id={`pg-${p.package_id}`} name="image_urls" class="ap-textarea">{imagesText(p.package_id)}</textarea>
 							</div>
 							<div class="ap-form-actions ap-span-2">
-								<button type="submit" class="ap-btn ap-btn--secondary">Update package</button>
+								<button type="submit" class="ap-btn ap-btn--secondary" disabled={updateUploadBusy[p.package_id]}>
+									{updateUploadBusy[p.package_id] ? "Uploading…" : "Update package"}
+								</button>
 							</div>
 						</form>
 
