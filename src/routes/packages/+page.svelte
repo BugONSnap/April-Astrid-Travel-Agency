@@ -1,373 +1,261 @@
 <script lang="ts">
-import type { PageProps } from "./$types";
-import Header from "$lib/assets/header.svelte"
-import Footer from "$lib/assets/footer.svelte"
+	import type { PageProps } from "./$types";
+	import Header from "$lib/assets/header.svelte";
+	import Footer from "$lib/assets/footer.svelte";
+	import type { Continent } from "$lib/geo/countryContinent";
+	import { destinationCardLabel, packageDestinationCaption } from "$lib/display/destination";
 
-let { data }: PageProps = $props();
+	let { data }: PageProps = $props();
 
-/* FILTER STATE */
+	let search = $state("");
+	let continent = $state("All");
+	let maxPrice = $state(150000);
+	let duration = $state("All");
 
-let search=""
-let continent="All"
-let maxPrice=150000
-let duration="All"
+	const continentFilterOptions: (Continent | "Other" | "All")[] = [
+		"All",
+		"Asia",
+		"Oceania",
+		"North America",
+		"Europe",
+		"South America",
+		"Africa",
+		"Other",
+	];
 
-/* NOTE
- * This page should be fully DB-driven (no hardcoded package cards). We re-map the
- * server payload into the placeholder UI shape below.
- */
+	const serverPackages = $derived(
+		(data.packages ?? []).map((p: any) => ({
+			name: p.package_name,
+			country: p.destination_country,
+			destinationLine: packageDestinationCaption(p.destination_city, p.destination_country),
+			continent: p.destination_continent as Continent | "Other",
+			price: p.price,
+			duration: p.duration_days ?? 9999,
+			image: p.image_url,
+			badge: p.category,
+		})),
+	);
 
-/* SERVER DATA MAPPING */
+	const filtered = $derived(
+		serverPackages.filter((p: any) => {
+			return (
+				(continent === "All" || p.continent === continent) &&
+				p.price <= maxPrice &&
+				(duration === "All" || p.duration <= parseInt(duration, 10)) &&
+				p.name.toLowerCase().includes(search.toLowerCase())
+			);
+		}),
+	);
 
-const asiaCountries = new Set((data.destinationsByRegion?.["Asia"] ?? []).map((d: any) => d.country_name));
-const europeCountries = new Set((data.destinationsByRegion?.["Europe"] ?? []).map((d: any) => d.country_name));
-const americaCountries = new Set((data.destinationsByRegion?.["America"] ?? []).map((d: any) => d.country_name));
+	let carouselRefs = $state<Record<string, HTMLDivElement | null>>({});
 
-// Re-map DB data into the UI shape used below.
-const serverPackages = (data.packages ?? []).map((p: any) => {
-	let pkgContinent = "Africa";
-	if (asiaCountries.has(p.destination_country)) pkgContinent = "Asia";
-	else if (europeCountries.has(p.destination_country)) pkgContinent = "Europe";
-	else if (americaCountries.has(p.destination_country)) pkgContinent = "North America";
+	function scrollContinent(cont: string, delta: number) {
+		carouselRefs[cont]?.scrollBy({ left: delta, behavior: "smooth" });
+	}
 
-	return {
-		name: p.package_name,
-		country: p.destination_country,
-		continent: pkgContinent,
-		price: p.price,
-		// If duration is missing, set to a very high number so it won't match duration filters.
-		duration: p.duration_days ?? 9999,
-		image: p.image_url,
-		badge: p.category,
-	};
-});
+	function destCardsForContinent(cont: Continent) {
+		const list = data.destinationsByContinent?.[cont] ?? [];
+		return list.map((d: any) => ({
+			name: destinationCardLabel({ city_name: d.city_name, country_name: d.country_name }),
+			image: d.image_cover,
+		}));
+	}
 
-/* FILTER */
-
-const filtered = $derived(serverPackages.filter((p: any) => {
-
-return(
-(continent==="All"||p.continent===continent) &&
-p.price<=maxPrice &&
-(duration==="All"||p.duration<=parseInt(duration)) &&
-p.name.toLowerCase().includes(search.toLowerCase())
-)
-
-}));
-
-/* NETFLIX SCROLL */
-
-let asiaCarousel: HTMLDivElement | null = null
-let europeCarousel: HTMLDivElement | null = null
-let americaCarousel: HTMLDivElement | null = null
-
-function scrollLeft(el: HTMLDivElement | null | undefined) {
-	el?.scrollBy({ left: -400, behavior: "smooth" });
-}
-
-function scrollRight(el: HTMLDivElement | null | undefined) {
-	el?.scrollBy({ left: 400, behavior: "smooth" });
-}
-
-/* DESTINATIONS */
-
-const asia = (data.destinationsByRegion?.["Asia"] ?? []).map((d: any) => ({
-	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
-	image: d.image_cover,
-}));
-
-const europe = (data.destinationsByRegion?.["Europe"] ?? []).map((d: any) => ({
-	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
-	image: d.image_cover,
-}));
-
-const america = (data.destinationsByRegion?.["America"] ?? []).map((d: any) => ({
-	name: d.city_name ? `${d.city_name}, ${d.country_name}` : d.country_name,
-	image: d.image_cover,
-}));
-
+	function destCardsOther() {
+		const list = data.destinationsOther ?? [];
+		return list.map((d: any) => ({
+			name: destinationCardLabel({ city_name: d.city_name, country_name: d.country_name }),
+			image: d.image_cover,
+		}));
+	}
 </script>
 
+<Header />
 
-<Header/>
-
-<!-- HERO -->
-
-<section class="bg-gradient-to-r from-red-600 to-orange-500 text-white py-20 text-center">
-
-<h1 class="text-4xl font-bold mb-4">
-Explore Travel Packages
-</h1>
-
-<p>
-Find unforgettable adventures around the world
-</p>
-
+<section class="bg-linear-to-r from-red-600 to-orange-500 py-20 text-center text-white">
+	<h1 class="mb-4 text-4xl font-bold">Explore Travel Packages</h1>
+	<p>Find unforgettable adventures around the world</p>
 </section>
 
+<section class="mx-auto max-w-7xl px-6 py-12">
+	<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+		<input
+			placeholder="Search package..."
+			bind:value={search}
+			class="rounded-lg border p-3"
+		/>
 
+		<select bind:value={continent} class="rounded-lg border p-3">
+			{#each continentFilterOptions as c}
+				<option value={c}>{c === "All" ? "All continents" : c}</option>
+			{/each}
+		</select>
 
-<!-- FILTER SECTION -->
+		<select bind:value={duration} class="rounded-lg border p-3">
+			<option value="All">Any Duration</option>
+			<option value="5">5 Days</option>
+			<option value="7">7 Days</option>
+			<option value="10">10 Days</option>
+		</select>
 
-<section class="max-w-7xl mx-auto py-12 px-6">
-
-<div class="grid lg:grid-cols-4 md:grid-cols-2 gap-4">
-
-<input
-placeholder="Search package..."
-bind:value={search}
-class="border rounded-lg p-3"
-/>
-
-<select bind:value={continent} class="border rounded-lg p-3">
-
-<option value="All">All Continents</option>
-<option value="Asia">Asia</option>
-<option value="Europe">Europe</option>
-<option value="North America">North America</option>
-<option value="Africa">Africa</option>
-
-</select>
-
-
-<select bind:value={duration} class="border rounded-lg p-3">
-
-<option value="All">Any Duration</option>
-<option value="5">5 Days</option>
-<option value="7">7 Days</option>
-<option value="10">10 Days</option>
-
-</select>
-
-
-<div>
-
-<label class="text-sm text-gray-600">
-Max Price ₱{maxPrice}
-</label>
-
-<input
-type="range"
-min="20000"
-max="150000"
-step="5000"
-bind:value={maxPrice}
-class="w-full"
-/>
-
-</div>
-
-</div>
-
+		<div>
+			<label class="text-sm text-gray-600" for="pkg-max-price">Max Price ₱{maxPrice}</label>
+			<input
+				id="pkg-max-price"
+				type="range"
+				min="20000"
+				max="150000"
+				step="5000"
+				bind:value={maxPrice}
+				class="w-full"
+			/>
+		</div>
+	</div>
 </section>
 
+<section class="mx-auto max-w-7xl px-6 pb-20">
+	<div class="grid gap-10 lg:grid-cols-2 xl:grid-cols-3">
+		{#if filtered.length === 0}
+			<div class="col-span-full py-12 text-center text-gray-600">More coming soon</div>
+		{:else}
+			{#each filtered as pkg}
+				<div class="group overflow-hidden rounded-2xl bg-white shadow transition hover:shadow-2xl">
+					<div class="relative">
+						{#if pkg.image}
+							<img
+								src={pkg.image}
+								class="h-56 w-full object-cover transition group-hover:scale-110"
+								alt={pkg.name}
+							/>
+						{:else}
+							<div
+								class="h-56 w-full bg-linear-to-br from-red-900/25 to-slate-800/40"
+								aria-hidden="true"
+							></div>
+						{/if}
+						<span class="absolute top-4 left-4 rounded-full bg-red-600 px-3 py-1 text-xs text-white">
+							{pkg.badge}
+						</span>
+					</div>
+					<div class="p-6">
+						<h3 class="text-lg font-semibold">{pkg.name}</h3>
+						<p class="text-sm text-gray-500">
+							{pkg.destinationLine} · {pkg.continent}
+							{#if pkg.duration < 9999}
+								· {pkg.duration} days
+							{/if}
+						</p>
+						<div class="mt-4 flex items-center justify-between">
+							<p class="text-xl font-bold text-red-600">₱{pkg.price.toLocaleString()}</p>
+							<button type="button" class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700">
+								View Deal
+							</button>
+						</div>
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</div>
+</section>
 
-
-<!-- PACKAGE GRID -->
-
-<section class="max-w-7xl mx-auto px-6 pb-20">
-
-<div class="grid xl:grid-cols-3 lg:grid-cols-2 gap-10">
-
-{#if filtered.length === 0}
-	<div class="col-span-full text-center py-12 text-gray-600">More coming soon</div>
-{:else}
-	{#each filtered as pkg}
-
-<div class="bg-white rounded-2xl shadow hover:shadow-2xl overflow-hidden group transition">
-
-<div class="relative">
-
-<img
-src={pkg.image}
-class="h-56 w-full object-cover group-hover:scale-110 transition"
-alt={pkg.name}
-/>
-
-<span class="absolute top-4 left-4 bg-red-600 text-white text-xs px-3 py-1 rounded-full">
-{pkg.badge}
-</span>
-
-</div>
-
-<div class="p-6">
-
-<h3 class="font-semibold text-lg">
-{pkg.name}
-</h3>
-
-<p class="text-gray-500 text-sm">
-{pkg.country} • {pkg.duration >= 9999 ? "—" : pkg.duration} Days
-</p>
-
-<div class="flex justify-between items-center mt-4">
-
-<p class="text-red-600 text-xl font-bold">
-₱{pkg.price.toLocaleString()}
-</p>
-
-<button class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
-View Deal
-</button>
-
-</div>
-
-</div>
-
-</div>
-
+<section class="mx-auto max-w-7xl px-6 pb-20">
+	<h2 class="mb-6 text-3xl font-bold">Destinations by continent</h2>
+	{#each data.continentCarouselOrder ?? [] as cont (cont)}
+		{@const cards = destCardsForContinent(cont)}
+		<div class="mb-16">
+			<h3 class="mb-4 text-2xl font-semibold">{cont}</h3>
+			{#if cards.length === 0}
+				<div class="w-full rounded-xl border border-gray-200 bg-gray-50 py-10 text-center text-gray-600">
+					More coming soon
+				</div>
+			{:else}
+				<div class="relative">
+					<button
+						type="button"
+						onclick={() => scrollContinent(cont, -400)}
+						class="absolute top-1/2 -left-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+					>
+						‹
+					</button>
+					<div
+						bind:this={carouselRefs[cont]}
+						class="flex gap-6 overflow-x-auto scroll-smooth"
+					>
+						{#each cards as d}
+							<div class="group relative min-w-[260px] overflow-hidden rounded-xl shadow">
+								{#if d.image}
+									<img
+										src={d.image}
+										alt={d.name}
+										class="h-44 w-full object-cover transition group-hover:scale-110"
+									/>
+								{:else}
+									<div
+										class="h-44 w-full bg-linear-to-br from-red-900/20 to-slate-800/35"
+										aria-hidden="true"
+									></div>
+								{/if}
+								<div class="absolute inset-0 flex items-center justify-center bg-black/40">
+									<h4 class="text-lg font-bold text-white">{d.name}</h4>
+								</div>
+							</div>
+						{/each}
+					</div>
+					<button
+						type="button"
+						onclick={() => scrollContinent(cont, 400)}
+						class="absolute top-1/2 -right-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+					>
+						›
+					</button>
+				</div>
+			{/if}
+		</div>
 	{/each}
-{/if}
 
-</div>
-
+	{#if (data.destinationsOther ?? []).length > 0}
+		{@const otherCards = destCardsOther()}
+		<div class="mb-16">
+			<h3 class="mb-4 text-2xl font-semibold">Other regions</h3>
+			<div class="relative">
+				<button
+					type="button"
+					onclick={() => scrollContinent("__other__", -400)}
+					class="absolute top-1/2 -left-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+				>
+					‹
+				</button>
+				<div bind:this={carouselRefs["__other__"]} class="flex gap-6 overflow-x-auto scroll-smooth">
+					{#each otherCards as d}
+						<div class="group relative min-w-[260px] overflow-hidden rounded-xl shadow">
+							{#if d.image}
+								<img
+									src={d.image}
+									alt={d.name}
+									class="h-44 w-full object-cover transition group-hover:scale-110"
+								/>
+							{:else}
+								<div
+									class="h-44 w-full bg-linear-to-br from-red-900/20 to-slate-800/35"
+									aria-hidden="true"
+								></div>
+							{/if}
+							<div class="absolute inset-0 flex items-center justify-center bg-black/40">
+								<h4 class="text-lg font-bold text-white">{d.name}</h4>
+							</div>
+						</div>
+					{/each}
+				</div>
+				<button
+					type="button"
+					onclick={() => scrollContinent("__other__", 400)}
+					class="absolute top-1/2 -right-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+				>
+					›
+				</button>
+			</div>
+		</div>
+	{/if}
 </section>
 
-
-
-<!-- DESTINATION CAROUSELS -->
-
-<section class="max-w-7xl mx-auto px-6 pb-20">
-
-<h2 class="text-3xl font-bold mb-6">
-Asia Destinations
-</h2>
-
-{#if asia.length === 0}
-	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
-		More coming soon
-	</div>
-{:else}
-<div class="relative">
-
-<button on:click={()=>scrollLeft(asiaCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
-
-<div bind:this={asiaCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
-
-{#each asia as d}
-
-<div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
-
-<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
-
-<div class="absolute inset-0 bg-black/40 flex items-center justify-center">
-
-<h3 class="text-white font-bold text-lg">
-{d.name}
-</h3>
-
-</div>
-
-</div>
-
-{/each}
-
-</div>
-
-<button on:click={()=>scrollRight(asiaCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
-
-</div>
-{/if}
-
-</section>
-
-
-
-<!-- EUROPE -->
-
-<section class="max-w-7xl mx-auto px-6 pb-20">
-
-<h2 class="text-3xl font-bold mb-6">
-Europe Destinations
-</h2>
-
-{#if europe.length === 0}
-	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
-		More coming soon
-	</div>
-{:else}
-<div class="relative">
-
-<button on:click={()=>scrollLeft(europeCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
-
-<div bind:this={europeCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
-
-{#each europe as d}
-
-<div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
-
-<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
-
-<div class="absolute inset-0 bg-black/40 flex items-center justify-center">
-
-<h3 class="text-white font-bold text-lg">
-{d.name}
-</h3>
-
-</div>
-
-</div>
-
-{/each}
-
-</div>
-
-<button on:click={()=>scrollRight(europeCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
-
-</div>
-{/if}
-
-</section>
-
-
-
-<!-- AMERICA -->
-
-<section class="max-w-7xl mx-auto px-6 pb-20">
-
-<h2 class="text-3xl font-bold mb-6">
-America Destinations
-</h2>
-
-{#if america.length === 0}
-	<div class="text-center py-10 text-gray-600 w-full bg-gray-50 rounded-xl border border-gray-200">
-		More coming soon
-	</div>
-{:else}
-<div class="relative">
-
-<button on:click={()=>scrollLeft(americaCarousel)} class="absolute top-1/2 -left-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">‹</button>
-
-<div bind:this={americaCarousel} class="flex gap-6 overflow-x-auto scroll-smooth">
-
-{#each america as d}
-
-<div class="min-w-[260px] relative rounded-xl overflow-hidden shadow group">
-
-<img src={d.image} alt={d.name} class="h-44 w-full object-cover group-hover:scale-110 transition"/>
-
-<div class="absolute inset-0 bg-black/40 flex items-center justify-center">
-
-<h3 class="text-white font-bold text-lg">
-{d.name}
-</h3>
-
-</div>
-
-</div>
-
-{/each}
-
-</div>
-
-<button on:click={()=>scrollRight(americaCarousel)} class="absolute top-1/2 -right-4 -translate-y-1/2 bg-white rounded-full shadow p-2 text-3xl leading-none z-10 hover:shadow-lg">›</button>
-
-</div>
-{/if}
-
-</section>
-
-
-<Footer/>
-
-
+<Footer />

@@ -89,14 +89,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 			total_price: schema.booking.total_price,
 			booking_status: schema.booking.booking_status,
 			payment_status: schema.booking.payment_status,
+			booking_kind: schema.booking.booking_kind,
+			service_title: schema.booking.service_title,
 			package_id: schema.packageTable.package_id,
 			package_name: schema.packageTable.package_name,
 			destination_country: schema.destination.country_name,
 			destination_city: schema.destination.city_name,
 		})
 		.from(schema.booking)
-		.innerJoin(schema.packageTable, eq(schema.booking.package_id, schema.packageTable.package_id))
-		.innerJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
+		.leftJoin(schema.packageTable, eq(schema.booking.package_id, schema.packageTable.package_id))
+		.leftJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
 		.where(eq(schema.booking.user_id, locals.user.user_id))
 		.orderBy(desc(schema.booking.booking_date));
 
@@ -112,11 +114,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 			package_name: schema.packageTable.package_name,
 			destination_country: schema.destination.country_name,
 			destination_city: schema.destination.city_name,
+			booking_kind: schema.booking.booking_kind,
+			service_title: schema.booking.service_title,
 		})
 		.from(schema.payment)
 		.innerJoin(schema.booking, eq(schema.payment.booking_id, schema.booking.booking_id))
-		.innerJoin(schema.packageTable, eq(schema.booking.package_id, schema.packageTable.package_id))
-		.innerJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
+		.leftJoin(schema.packageTable, eq(schema.booking.package_id, schema.packageTable.package_id))
+		.leftJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
 		.where(eq(schema.booking.user_id, locals.user.user_id))
 		.orderBy(desc(schema.payment.payment_date));
 
@@ -199,9 +203,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 		},
 		bookings: bookingRows.map((b) => ({
 			booking_id: b.booking_id,
-			title: b.destination_city ? `${b.destination_country}, ${b.destination_city}` : b.destination_country,
-			package_name: b.package_name,
-			destination: b.destination_city ? b.destination_city : b.destination_country,
+			title:
+				b.booking_kind === "SERVICE"
+					? (b.service_title ?? "Service")
+					: b.destination_city
+						? `${b.destination_country}, ${b.destination_city}`
+						: (b.destination_country ?? b.package_name ?? "Tour"),
+			package_name: b.booking_kind === "SERVICE" ? (b.service_title ?? "Service") : b.package_name,
+			destination:
+				b.booking_kind === "SERVICE"
+					? "Service"
+					: b.destination_city
+						? b.destination_city
+						: b.destination_country,
 			booking_date: b.booking_date,
 			travel_date: b.travel_date,
 			number_of_people: b.number_of_people,
@@ -226,8 +240,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.filter((b) => b.payment_status === "UNPAID" && b.booking_status !== "CANCELLED")
 			.map((b) => ({
 				booking_id: b.booking_id,
-				package_name: b.package_name,
-				destination_country: b.destination_country,
+				package_name:
+					b.booking_kind === "SERVICE" ? (b.service_title ?? "Service") : b.package_name,
+				destination_country: b.booking_kind === "SERVICE" ? "—" : b.destination_country,
 				destination_city: b.destination_city,
 				total_price: b.total_price,
 				travel_date: b.travel_date,
@@ -240,9 +255,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			payment_status: p.payment_status,
 			transaction_reference: p.transaction_reference,
 			payment_date: p.payment_date,
-			package_name: p.package_name,
-			destination_country: p.destination_country,
-			destination_city: p.destination_city,
+			package_name:
+				p.booking_kind === "SERVICE" ? (p.service_title ?? "Service") : p.package_name,
+			destination_country: p.booking_kind === "SERVICE" ? "—" : p.destination_country,
+			destination_city: p.booking_kind === "SERVICE" ? null : p.destination_city,
 		})),
 		explore: exploreRows.map((p) => ({
 			package_id: p.package_id,

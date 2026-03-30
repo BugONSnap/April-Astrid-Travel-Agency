@@ -85,7 +85,8 @@ data: formData
 			return
 		}
 
-		submitSuccess = 'Request submitted! We’ll message you in Support chat with next steps.'
+		submitSuccess =
+			'Request submitted! Open Customer Support chat to continue — staff will confirm services there and can record your booking when ready.'
 		formData = {}
 	} catch {
 		submitError = 'Network error submitting request.'
@@ -319,7 +320,8 @@ $: current = services[selectedService]
 
 				{#if submitSuccess}
 					<div class="mt-4 rounded-xl border border-emerald-900/10 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
-						{submitSuccess}
+						<p class="m-0">{submitSuccess}</p>
+						<a href="/userchat" class="mt-2 inline-block font-semibold text-emerald-950 underline">Open Customer Support chat →</a>
 					</div>
 				{/if}
 

@@ -6,7 +6,12 @@
 	type Dest = (typeof data.destinations)[number];
 
 	let query = $state("");
-	let selectedId = $state<number | "new">("new");
+	let selectedId = $state<number | "new-country" | "new-city">("new-country");
+
+	$effect(() => {
+		if (data.initialCreate === "city") selectedId = "new-city";
+		else if (data.initialCreate === "country") selectedId = "new-country";
+	});
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
@@ -18,8 +23,41 @@
 	});
 
 	const selected = $derived.by(() => {
-		if (selectedId === "new") return null;
+		if (selectedId === "new-country" || selectedId === "new-city") return null;
 		return data.destinations.find((d) => d.destination_id === selectedId) ?? null;
+	});
+
+	const citiesInSelectedCountry = $derived.by(() => {
+		const s = selected;
+		if (!s || (s.city_name != null && String(s.city_name).trim() !== "")) return [];
+		return data.destinations.filter(
+			(d) =>
+				d.country_name === s.country_name &&
+				d.continent === s.continent &&
+				d.city_name != null &&
+				String(d.city_name).trim() !== "",
+		);
+	});
+
+	const covers = $derived(data.staticDestinationCovers);
+	let useStaticNewCountry = $state(false);
+	let useStaticNewCity = $state(false);
+	let useStaticEdit = $state(false);
+	let useStaticNested = $state(false);
+	let staticIdxNewCountry = $state(0);
+	let staticIdxNewCity = $state(0);
+	let staticIdxEdit = $state(0);
+	let staticIdxNested = $state(0);
+
+	function wrapIdx(i: number, len: number) {
+		if (len <= 0) return 0;
+		return ((i % len) + len) % len;
+	}
+
+	$effect(() => {
+		selected?.destination_id;
+		useStaticEdit = false;
+		staticIdxEdit = 0;
 	});
 </script>
 
@@ -32,7 +70,10 @@
 		<div>
 			<p class="ap-kicker">Catalog</p>
 			<h1 class="ap-title">Destinations</h1>
-			<p class="ap-sub">Manage countries and cities, with cover images stored on Cloudinary. Select an item on the left to edit it in the tablet.</p>
+			<p class="ap-sub">
+				Create a <strong>country</strong> first (city optional empty), then add <strong>cities</strong> under that country. Covers: upload a file, or cycle through images in
+				<code class="dest-code">static/uploads/destinations</code> (served as <code class="dest-code">/uploads/destinations/…</code>).
+			</p>
 		</div>
 		<a href="/admin" class="ap-back">← Dashboard</a>
 	</header>
@@ -44,9 +85,14 @@
 					<h2 class="dest-rail-title">All destinations</h2>
 					<p class="dest-rail-sub">{data.destinations.length} total</p>
 				</div>
-				<button type="button" class="dest-pill dest-pill--primary" onclick={() => (selectedId = "new")}>
-					+ New
-				</button>
+				<div class="dest-rail-actions">
+					<button type="button" class="dest-pill dest-pill--primary" onclick={() => (selectedId = "new-country")}>
+						+ Country
+					</button>
+					<button type="button" class="dest-pill" onclick={() => (selectedId = "new-city")} title="Add a city under a country you created">
+						+ City
+					</button>
+				</div>
 			</div>
 
 			<div class="dest-search">
@@ -76,7 +122,14 @@
 									<span class="dest-item-country">{d.country_name}</span>
 									<span class="dest-item-id">#{d.destination_id}</span>
 								</div>
-								<div class="dest-item-sub">{d.city_name ?? "—"}</div>
+								<div class="dest-item-sub">
+									{#if d.city_name == null || String(d.city_name).trim() === ""}
+										<span class="dest-item-tag">Country</span>
+									{:else}
+										{d.city_name}
+									{/if}
+									{#if d.continent} · {d.continent}{/if}
+								</div>
 							</div>
 						</button>
 					{/each}
@@ -93,32 +146,154 @@
 				</div>
 
 				<div class="dest-tablet-content">
-					{#if selectedId === "new"}
+					{#if selectedId === "new-country"}
 						<div class="dest-tablet-head">
-							<h2 class="dest-tablet-title">Add destination</h2>
-							<p class="dest-tablet-sub">Create a new country/city entry.</p>
+							<h2 class="dest-tablet-title">Create country</h2>
+							<p class="dest-tablet-sub">Saves as a country tile (no city yet). Use <strong>+ City</strong> next to add places like Siargao under it.</p>
 						</div>
-						<form method="post" action="?/createDestination" class="ap-form-grid" enctype="multipart/form-data">
-							<div class="ap-field">
-								<label class="ap-label" for="d-country">Country</label>
-								<input id="d-country" name="country_name" class="ap-input" placeholder="Country name" required />
+						<form method="post" action="?/createCountry" class="ap-form-grid" enctype="multipart/form-data">
+							<div class="ap-field ap-span-2">
+								<label class="ap-label" for="d-country">Country name</label>
+								<input id="d-country" name="country_name" class="ap-input" placeholder="e.g. Philippines" required />
 							</div>
-							<div class="ap-field">
-								<label class="ap-label" for="d-city">City</label>
-								<input id="d-city" name="city_name" class="ap-input" placeholder="Optional" />
+							<div class="ap-field ap-span-2">
+								<label class="ap-label" for="d-continent">Continent</label>
+								<select id="d-continent" name="continent" class="ap-select" required>
+									<option value="" disabled selected>Select continent…</option>
+									{#each data.continentOptions as c}
+										<option value={c}>{c}</option>
+									{/each}
+								</select>
 							</div>
 							<div class="ap-field ap-span-2">
 								<label class="ap-label" for="d-cover">Cover image (upload)</label>
 								<input id="d-cover" type="file" name="image_cover_file" class="ap-input" accept="image/*" />
 							</div>
+							{#if covers.length > 0}
+								<div class="ap-field ap-span-2 dest-static-block">
+									<label class="dest-static-toggle">
+										<input type="checkbox" bind:checked={useStaticNewCountry} />
+										<span>Use image from <code>static/uploads/destinations</code> (ignored if you also upload a file)</span>
+									</label>
+									{#if useStaticNewCountry}
+										<div class="dest-static-cycle" role="group" aria-label="Cycle static cover images">
+											<button
+												type="button"
+												class="dest-static-arrow"
+												aria-label="Previous image"
+												onclick={() => (staticIdxNewCountry = wrapIdx(staticIdxNewCountry - 1, covers.length))}
+											>
+												‹
+											</button>
+											<div class="dest-static-preview">
+												<img
+													src={covers[wrapIdx(staticIdxNewCountry, covers.length)]}
+													alt=""
+													loading="lazy"
+												/>
+											</div>
+											<button
+												type="button"
+												class="dest-static-arrow"
+												aria-label="Next image"
+												onclick={() => (staticIdxNewCountry = wrapIdx(staticIdxNewCountry + 1, covers.length))}
+											>
+												›
+											</button>
+										</div>
+										<input
+											type="hidden"
+											name="image_cover_static"
+											value={covers[wrapIdx(staticIdxNewCountry, covers.length)]}
+										/>
+									{/if}
+								</div>
+							{/if}
 							<div class="ap-field ap-span-2">
 								<label class="ap-label" for="d-desc">Description</label>
 								<textarea id="d-desc" name="description" class="ap-textarea" placeholder="Optional"></textarea>
 							</div>
 							<div class="dest-actions">
-								<button type="submit" class="dest-pill dest-pill--primary">Create</button>
+								<button type="submit" class="dest-pill dest-pill--primary">Create country</button>
 							</div>
 						</form>
+					{:else if selectedId === "new-city"}
+						<div class="dest-tablet-head">
+							<h2 class="dest-tablet-title">Add city</h2>
+							<p class="dest-tablet-sub">
+								Choose a country you created first, then name the city. It shares continent and defaults to the country’s cover unless you upload a new one.
+							</p>
+						</div>
+						{#if data.countryHubs.length === 0}
+							<p class="ap-empty">Create a country with <strong>+ Country</strong> before adding cities.</p>
+						{:else}
+							<form method="post" action="?/addCityToCountry" class="ap-form-grid" enctype="multipart/form-data">
+								<div class="ap-field ap-span-2">
+									<label class="ap-label" for="d-parent">Country</label>
+									<select id="d-parent" name="parent_destination_id" class="ap-select" required>
+										<option value="" disabled selected>Select country…</option>
+										{#each data.countryHubs as h}
+											<option value={h.destination_id}>{h.country_name}{#if h.continent} · {h.continent}{/if}</option>
+										{/each}
+									</select>
+								</div>
+								<div class="ap-field ap-span-2">
+									<label class="ap-label" for="d-city-new">City name</label>
+									<input id="d-city-new" name="city_name" class="ap-input" placeholder="e.g. Siargao" required />
+								</div>
+								<div class="ap-field ap-span-2">
+									<label class="ap-label" for="d-cover-city">Cover image (optional)</label>
+									<input id="d-cover-city" type="file" name="image_cover_file" class="ap-input" accept="image/*" />
+								</div>
+								{#if covers.length > 0}
+									<div class="ap-field ap-span-2 dest-static-block">
+										<label class="dest-static-toggle">
+											<input type="checkbox" bind:checked={useStaticNewCity} />
+											<span>Use image from <code>static/uploads/destinations</code> (ignored if you also upload a file)</span>
+										</label>
+										{#if useStaticNewCity}
+											<div class="dest-static-cycle" role="group" aria-label="Cycle static cover images">
+												<button
+													type="button"
+													class="dest-static-arrow"
+													aria-label="Previous image"
+													onclick={() => (staticIdxNewCity = wrapIdx(staticIdxNewCity - 1, covers.length))}
+												>
+													‹
+												</button>
+												<div class="dest-static-preview">
+													<img
+														src={covers[wrapIdx(staticIdxNewCity, covers.length)]}
+														alt=""
+														loading="lazy"
+													/>
+												</div>
+												<button
+													type="button"
+													class="dest-static-arrow"
+													aria-label="Next image"
+													onclick={() => (staticIdxNewCity = wrapIdx(staticIdxNewCity + 1, covers.length))}
+												>
+													›
+												</button>
+											</div>
+											<input
+												type="hidden"
+												name="image_cover_static"
+												value={covers[wrapIdx(staticIdxNewCity, covers.length)]}
+											/>
+										{/if}
+									</div>
+								{/if}
+								<div class="ap-field ap-span-2">
+									<label class="ap-label" for="d-desc-city">Description</label>
+									<textarea id="d-desc-city" name="description" class="ap-textarea" placeholder="Optional; leave empty to reuse country description"></textarea>
+								</div>
+								<div class="dest-actions">
+									<button type="submit" class="dest-pill dest-pill--primary">Add city</button>
+								</div>
+							</form>
+						{/if}
 					{:else if selected}
 						<div class="dest-tablet-head">
 							<div>
@@ -160,9 +335,66 @@
 								<input id="ed-city" name="city_name" class="ap-input" value={selected.city_name ?? ""} />
 							</div>
 							<div class="ap-field ap-span-2">
+								<label class="ap-label" for="ed-continent">Continent</label>
+								<select
+									id="ed-continent"
+									name="continent"
+									class="ap-select"
+									required
+									value={selected.continent ?? ""}
+								>
+									{#if !selected.continent}
+										<option value="" disabled>Choose continent…</option>
+									{/if}
+									{#each data.continentOptions as c}
+										<option value={c}>{c}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="ap-field ap-span-2">
 								<label class="ap-label" for="ed-cover">Cover image (upload)</label>
 								<input id="ed-cover" type="file" name="image_cover_file" class="ap-input" accept="image/*" />
 							</div>
+							{#if covers.length > 0}
+								<div class="ap-field ap-span-2 dest-static-block">
+									<label class="dest-static-toggle">
+										<input type="checkbox" bind:checked={useStaticEdit} />
+										<span>Use image from <code>static/uploads/destinations</code> (ignored if you also upload a file)</span>
+									</label>
+									{#if useStaticEdit}
+										<div class="dest-static-cycle" role="group" aria-label="Cycle static cover images">
+											<button
+												type="button"
+												class="dest-static-arrow"
+												aria-label="Previous image"
+												onclick={() => (staticIdxEdit = wrapIdx(staticIdxEdit - 1, covers.length))}
+											>
+												‹
+											</button>
+											<div class="dest-static-preview">
+												<img
+													src={covers[wrapIdx(staticIdxEdit, covers.length)]}
+													alt=""
+													loading="lazy"
+												/>
+											</div>
+											<button
+												type="button"
+												class="dest-static-arrow"
+												aria-label="Next image"
+												onclick={() => (staticIdxEdit = wrapIdx(staticIdxEdit + 1, covers.length))}
+											>
+												›
+											</button>
+										</div>
+										<input
+											type="hidden"
+											name="image_cover_static"
+											value={covers[wrapIdx(staticIdxEdit, covers.length)]}
+										/>
+									{/if}
+								</div>
+							{/if}
 							<div class="ap-field ap-span-2">
 								<label class="ap-label" for="ed-desc">Description</label>
 								<textarea id="ed-desc" name="description" class="ap-textarea">{selected.description ?? ""}</textarea>
@@ -171,6 +403,89 @@
 								<button type="submit" class="dest-pill dest-pill--primary">Save changes</button>
 							</div>
 						</form>
+
+						{#if selected.city_name == null || String(selected.city_name).trim() === ""}
+							<div class="dest-nested">
+								<h3 class="dest-nested-title">Cities in this country</h3>
+								{#if citiesInSelectedCountry.length === 0}
+									<p class="dest-nested-empty">No cities yet — use the form below.</p>
+								{:else}
+									<ul class="dest-city-list">
+										{#each citiesInSelectedCountry as c (c.destination_id)}
+											<li>
+												<button type="button" class="dest-city-link" onclick={() => (selectedId = c.destination_id)}>
+													{c.city_name}
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								<form method="post" action="?/addCityToCountry" class="ap-form-grid" enctype="multipart/form-data">
+									<input type="hidden" name="parent_destination_id" value={selected.destination_id} />
+									<div class="ap-field ap-span-2">
+										<label class="ap-label" for="add-city-name">Add a city</label>
+										<input
+											id="add-city-name"
+											name="city_name"
+											class="ap-input"
+											placeholder="City name"
+											required
+										/>
+									</div>
+									<div class="ap-field ap-span-2">
+										<label class="ap-label" for="add-city-cover">Cover (optional)</label>
+										<input id="add-city-cover" type="file" name="image_cover_file" class="ap-input" accept="image/*" />
+									</div>
+									{#if covers.length > 0}
+										<div class="ap-field ap-span-2 dest-static-block">
+											<label class="dest-static-toggle">
+												<input type="checkbox" bind:checked={useStaticNested} />
+												<span>Use image from <code>static/uploads/destinations</code> (ignored if you also upload a file)</span>
+											</label>
+											{#if useStaticNested}
+												<div class="dest-static-cycle" role="group" aria-label="Cycle static cover images">
+													<button
+														type="button"
+														class="dest-static-arrow"
+														aria-label="Previous image"
+														onclick={() => (staticIdxNested = wrapIdx(staticIdxNested - 1, covers.length))}
+													>
+														‹
+													</button>
+													<div class="dest-static-preview">
+														<img
+															src={covers[wrapIdx(staticIdxNested, covers.length)]}
+															alt=""
+															loading="lazy"
+														/>
+													</div>
+													<button
+														type="button"
+														class="dest-static-arrow"
+														aria-label="Next image"
+														onclick={() => (staticIdxNested = wrapIdx(staticIdxNested + 1, covers.length))}
+													>
+														›
+													</button>
+												</div>
+												<input
+													type="hidden"
+													name="image_cover_static"
+													value={covers[wrapIdx(staticIdxNested, covers.length)]}
+												/>
+											{/if}
+										</div>
+									{/if}
+									<div class="ap-field ap-span-2">
+										<label class="ap-label" for="add-city-desc">Description (optional)</label>
+										<textarea id="add-city-desc" name="description" class="ap-textarea" placeholder="Leave empty to reuse country description"></textarea>
+									</div>
+									<div class="dest-actions">
+										<button type="submit" class="dest-pill dest-pill--primary">Add city</button>
+									</div>
+								</form>
+							</div>
+						{/if}
 					{:else}
 						<p class="ap-empty">Pick a destination on the left.</p>
 					{/if}
@@ -212,10 +527,18 @@
 	.dest-rail-head {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
+		align-items: flex-start;
+		gap: 0.75rem;
 		padding: 1rem 1rem 0.75rem;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 		background: linear-gradient(180deg, rgba(196, 30, 58, 0.06), transparent);
+	}
+
+	.dest-rail-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		justify-content: flex-end;
 	}
 
 	.dest-rail-title {
@@ -316,6 +639,123 @@
 		margin-top: 0.2rem;
 		font-size: 0.9rem;
 		color: rgba(0, 0, 0, 0.62);
+	}
+
+	.dest-item-tag {
+		display: inline-block;
+		font-size: 0.65rem;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		padding: 0.12rem 0.4rem;
+		border-radius: 6px;
+		background: rgba(196, 30, 58, 0.12);
+		color: #8f0e24;
+		margin-right: 0.25rem;
+		vertical-align: middle;
+	}
+
+	.dest-nested {
+		margin-top: 1.25rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid rgba(0, 0, 0, 0.08);
+	}
+	.dest-nested-title {
+		margin: 0 0 0.65rem;
+		font-size: 0.95rem;
+		font-weight: 900;
+		color: #151515;
+	}
+	.dest-nested-empty {
+		margin: 0 0 0.85rem;
+		font-size: 0.85rem;
+		color: rgba(0, 0, 0, 0.55);
+	}
+	.dest-city-list {
+		margin: 0 0 0.85rem;
+		padding-left: 1.1rem;
+		font-size: 0.9rem;
+		color: rgba(0, 0, 0, 0.75);
+	}
+	.dest-city-link {
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		color: #8f0e24;
+		font-weight: 700;
+		cursor: pointer;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	.dest-city-link:hover {
+		color: #c41e3a;
+	}
+
+	.dest-code {
+		font-size: 0.8em;
+		padding: 0.1em 0.35em;
+		border-radius: 6px;
+		background: rgba(0, 0, 0, 0.06);
+		color: #1a1a1a;
+	}
+
+	.dest-static-block {
+		padding: 0.75rem 0.85rem;
+		border-radius: 14px;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		background: rgba(255, 255, 255, 0.65);
+	}
+	.dest-static-toggle {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		line-height: 1.45;
+		color: rgba(0, 0, 0, 0.72);
+		cursor: pointer;
+	}
+	.dest-static-toggle input {
+		margin-top: 0.2rem;
+		accent-color: #c41e3a;
+	}
+	.dest-static-cycle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.65rem;
+	}
+	.dest-static-arrow {
+		flex-shrink: 0;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 10px;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		background: rgba(255, 255, 255, 0.95);
+		font-size: 1.25rem;
+		line-height: 1;
+		cursor: pointer;
+		color: #8f0e24;
+		font-weight: 700;
+	}
+	.dest-static-arrow:hover {
+		border-color: rgba(196, 30, 58, 0.35);
+		background: rgba(196, 30, 58, 0.08);
+	}
+	.dest-static-preview {
+		flex: 1;
+		min-width: 0;
+		height: 120px;
+		border-radius: 12px;
+		overflow: hidden;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		background: #eee;
+	}
+	.dest-static-preview img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 
 	/* Tablet editor */

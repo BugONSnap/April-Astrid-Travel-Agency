@@ -1,7 +1,11 @@
 <script lang="ts">
 	import Header from "$lib/assets/header.svelte";
 	import { onMount, tick } from "svelte";
+	import { get } from "svelte/store";
 	import { page } from "$app/stores";
+	import type { PageProps } from "./$types";
+
+	let { data }: PageProps = $props();
 
 	type ChatMessage = {
 		message_id: number;
@@ -9,21 +13,64 @@
 		sender_id: number;
 		message_text: string;
 		sent_at: string;
+		message_kind?: string | null;
+		booking_id?: number | null;
 	};
 
-	let messages: ChatMessage[] = [];
-	let input = "";
-	let conversationId = 0;
+	let messages = $state<ChatMessage[]>([]);
+	let input = $state("");
+	let conversationId = $state(0);
 
-	let isBooting = true;
-	let isLoading = false;
-	let isSending = false;
-	let errorMsg = "";
+	let isBooting = $state(true);
+	let isLoading = $state(false);
+	let isSending = $state(false);
+	let errorMsg = $state("");
 
-	let bottomEl: HTMLDivElement | null = null;
+	let bottomEl: HTMLDivElement | null = $state(null);
 
-	$: userId = ($page.data.user?.user_id as number | undefined) ?? 0;
-	$: canChat = userId !== 0;
+	let userId = $state(0);
+	let canChat = $state(false);
+	$effect(() => {
+		const id = (get(page).data.user?.user_id as number | undefined) ?? 0;
+		userId = id;
+		canChat = id !== 0;
+	});
+
+	let bookingPackageId = $state("");
+	let bookingPax = $state(1);
+	let bookingTravel = $state("");
+	let bookingNote = $state("");
+	let bookingSubmitting = $state(false);
+	let bookingErr = $state("");
+
+	async function submitBookingRequest() {
+		if (!canChat || !bookingPackageId || bookingPax < 1 || bookingSubmitting) return;
+		bookingErr = "";
+		bookingSubmitting = true;
+		try {
+			const res = await fetch("/api/user/booking-request", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					packageId: Number.parseInt(bookingPackageId, 10),
+					numberOfPeople: bookingPax,
+					travelDate: bookingTravel.trim() || undefined,
+					note: bookingNote.trim() || undefined,
+				}),
+			});
+			if (!res.ok) {
+				const j = await res.json().catch(() => ({}));
+				bookingErr = typeof j.error === "string" ? j.error : "Could not send request.";
+				return;
+			}
+			bookingNote = "";
+			await loadChat();
+		} catch {
+			bookingErr = "Network error.";
+		} finally {
+			bookingSubmitting = false;
+		}
+	}
 
 	function scrollToBottom() {
 		if (!bottomEl) return;
@@ -132,9 +179,71 @@
 				Customer Support
 			</h1>
 			<p class="text-sm text-zinc-600">
-				Send us a message and an agent will reply as soon as possible.
+				Request a package below or write freely — staff confirm bookings here and you’ll see a green confirmation when
+				it’s recorded.
 			</p>
 		</div>
+
+		{#if canChat && data.packages.length > 0}
+			<div class="mb-6 rounded-2xl border border-red-900/10 bg-white p-4 shadow-sm">
+				<p class="text-xs font-semibold tracking-[0.12em] text-zinc-600 uppercase">Request a tour package</p>
+				<p class="mt-1 text-sm text-zinc-600">
+					Sends a structured request into this chat (not a confirmed booking until staff confirms).
+				</p>
+				<div class="mt-4 grid gap-3 sm:grid-cols-2">
+					<label class="block text-xs font-semibold text-zinc-700">
+						Package
+						<select
+							class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+							bind:value={bookingPackageId}
+						>
+							<option value="">Select…</option>
+							{#each data.packages as p}
+								<option value={String(p.package_id)}>
+									{p.package_name} — ₱{p.price.toLocaleString("en-PH")}
+								</option>
+							{/each}
+						</select>
+					</label>
+					<label class="block text-xs font-semibold text-zinc-700">
+						Guests
+						<input
+							type="number"
+							min="1"
+							class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+							bind:value={bookingPax}
+						/>
+					</label>
+					<label class="block text-xs font-semibold text-zinc-700">
+						Preferred travel date
+						<input
+							type="date"
+							class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+							bind:value={bookingTravel}
+						/>
+					</label>
+					<label class="block text-xs font-semibold text-zinc-700 sm:col-span-2">
+						Note (optional)
+						<input
+							class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+							bind:value={bookingNote}
+							placeholder="Special requests"
+						/>
+					</label>
+				</div>
+				{#if bookingErr}
+					<p class="mt-2 text-sm text-red-800" role="alert">{bookingErr}</p>
+				{/if}
+				<button
+					type="button"
+					class="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+					onclick={submitBookingRequest}
+					disabled={bookingSubmitting || !bookingPackageId}
+				>
+					{bookingSubmitting ? "Sending…" : "Send booking request to chat"}
+				</button>
+			</div>
+		{/if}
 
 		{#if !canChat}
 			<div class="rounded-2xl border border-red-900/10 bg-white p-6 shadow-sm">
@@ -170,7 +279,7 @@
 					<button
 						type="button"
 						class="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/15"
-						on:click={loadChat}
+						onclick={loadChat}
 						disabled={isLoading}
 					>
 						Refresh
@@ -200,12 +309,22 @@
 										<div
 											class={[
 												"max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[70%]",
-												m.sender_id === userId
-													? "bg-red-700 text-white"
-													: "border border-red-900/10 bg-white text-zinc-900",
+												m.message_kind === "booking_notice"
+													? "border border-emerald-400/50 bg-emerald-50 text-emerald-950"
+													: m.sender_id === userId
+														? "bg-red-700 text-white"
+														: "border border-red-900/10 bg-white text-zinc-900",
 											].join(" ")}
 										>
 											<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
+											{#if m.message_kind === "booking_notice"}
+												<a
+													href="/profile"
+													class="mt-2 inline-block text-xs font-semibold text-emerald-900 underline"
+												>
+													View in My Bookings →
+												</a>
+											{/if}
 										</div>
 									</div>
 								{/each}
@@ -216,14 +335,17 @@
 
 					<form
 						class="flex gap-2 border-t border-red-900/10 bg-white p-3 sm:p-4"
-						on:submit|preventDefault={send}
+						onsubmit={(e) => {
+							e.preventDefault();
+							send();
+						}}
 					>
 						<input
 							class="min-w-0 flex-1 rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-red-700/50 focus:ring-4 focus:ring-red-700/10"
 							placeholder="Type your message…"
 							bind:value={input}
 							disabled={isBooting || isLoading}
-							on:keydown={(e) => {
+							onkeydown={(e) => {
 								if (e.key === "Enter" && !e.shiftKey) {
 									e.preventDefault();
 									send();

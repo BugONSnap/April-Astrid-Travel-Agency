@@ -98,6 +98,8 @@ export const load: PageServerLoad = async () => {
 			.select({
 				destination_id: schema.destination.destination_id,
 				country_name: schema.destination.country_name,
+				city_name: schema.destination.city_name,
+				continent: schema.destination.continent,
 				image_cover: schema.destination.image_cover,
 			})
 			.from(schema.destination)
@@ -105,6 +107,7 @@ export const load: PageServerLoad = async () => {
 		db
 			.select({
 				package_id: schema.packageTable.package_id,
+				destination_id: schema.packageTable.destination_id,
 				package_name: schema.packageTable.package_name,
 				category: schema.packageTable.category,
 				price: schema.packageTable.price,
@@ -117,15 +120,15 @@ export const load: PageServerLoad = async () => {
 			.where(statusActiveOrNull()),
 	]);
 
-	// Build packages map: { [countryName]: [{ name, price }, ...] }
-	const packagesByDestinationCountry: Record<string, DestinationPackageItem[]> = {};
+	// One row per package destination (country hub vs city are different IDs)
+	const packagesByDestinationId: Record<number, DestinationPackageItem[]> = {};
 
 	for (const p of packagesForDest) {
-		if (!p.destination_country) continue;
-		if (!packagesByDestinationCountry[p.destination_country]) packagesByDestinationCountry[p.destination_country] = [];
+		const id = p.destination_id;
+		if (!packagesByDestinationId[id]) packagesByDestinationId[id] = [];
 
 		const price = `₱${Number(p.price).toLocaleString("en-PH")}`;
-		packagesByDestinationCountry[p.destination_country].push({
+		packagesByDestinationId[id].push({
 			name: p.package_name,
 			price,
 		});
@@ -135,7 +138,7 @@ export const load: PageServerLoad = async () => {
 		promoPackages,
 		starPackages,
 		destinations,
-		packagesByDestinationCountry,
+		packagesByDestinationId,
 	};
 };
 

@@ -78,6 +78,8 @@ export const destination = pgTable("destination", {
   destination_id: serial("destination_id").primaryKey(),
   country_name: text("country_name").notNull(),
   city_name: text("city_name"),
+  /** Africa | Asia | Europe | North America | South America | Oceania | Other */
+  continent: text("continent"),
   description: text("description"),
   image_cover: text("image_cover"),
   created_at: timestamp("created_at").notNull().defaultNow(),
@@ -125,7 +127,27 @@ export const packageImage = pgTable("package_image", {
   image_url: text("image_url").notNull(),
 });
 
+/* ================= MESSAGING: conversation (referenced by booking) ================= */
+
+// conversation (1 user ↔ 1 admin)
+export const conversation = pgTable("conversation", {
+  conversation_id: serial("conversation_id").primaryKey(),
+
+  user_id: integer("user_id")
+    .notNull()
+    .references(() => user.user_id),
+
+  admin_id: integer("admin_id").references(() => user.user_id),
+
+  status: text("status").default("open"),
+
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
 /* ================= BOOKING ================= */
+
+/** PACKAGE = tour package; SERVICE = e.g. visa / ticketing from Services Offered (no package row). */
+export const BOOKING_KIND = ["PACKAGE", "SERVICE"] as const;
 
 export const booking = pgTable("booking", {
   booking_id: serial("booking_id").primaryKey(),
@@ -134,9 +156,16 @@ export const booking = pgTable("booking", {
     .notNull()
     .references(() => user.user_id),
 
-  package_id: integer("package_id")
-    .notNull()
-    .references(() => packageTable.package_id),
+  /** Null when booking_kind is SERVICE. */
+  package_id: integer("package_id").references(() => packageTable.package_id),
+
+  /** Set when booking was created from support chat. */
+  conversation_id: integer("conversation_id").references(() => conversation.conversation_id),
+
+  booking_kind: text("booking_kind").notNull().default("PACKAGE"),
+
+  /** Required when booking_kind is SERVICE (e.g. "Tourist visa assistance"). */
+  service_title: text("service_title"),
 
   booking_date: timestamp("booking_date").notNull().defaultNow(),
   travel_date: timestamp("travel_date"),
@@ -191,22 +220,9 @@ export const bookmark = pgTable("bookmark", {
   created_at: timestamp("created_at").notNull().defaultNow(),
 });
 
-/* ================= MESSAGING ================= */
+/* ================= MESSAGING: messages ================= */
 
-// conversation (1 user ↔ 1 admin)
-export const conversation = pgTable("conversation", {
-  conversation_id: serial("conversation_id").primaryKey(),
-
-  user_id: integer("user_id")
-    .notNull()
-    .references(() => user.user_id),
-
-  admin_id: integer("admin_id").references(() => user.user_id),
-
-  status: text("status").default("open"),
-
-  created_at: timestamp("created_at").notNull().defaultNow(),
-});
+export const MESSAGE_KIND = ["text", "booking_notice"] as const;
 
 // messages (one-to-many inside conversation)
 export const message = pgTable("message", {
@@ -221,6 +237,11 @@ export const message = pgTable("message", {
     .references(() => user.user_id),
 
   message_text: text("message_text").notNull(),
+
+  message_kind: text("message_kind").notNull().default("text"),
+
+  /** Populated when message_kind is booking_notice. */
+  booking_id: integer("booking_id").references(() => booking.booking_id),
 
   is_read: integer("is_read").default(0),
 

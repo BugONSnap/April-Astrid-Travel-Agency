@@ -18,6 +18,12 @@
 		return `${d.country_name}${d.city_name ? ` — ${d.city_name}` : ""}`;
 	}
 
+	function destOptionLabel(d: (typeof data.destinations)[number]) {
+		const place = `${d.country_name}${d.city_name ? ` — ${d.city_name}` : ""}`;
+		const cont = d.continent?.trim();
+		return cont ? `${place} · ${cont}` : `${place} · ?`;
+	}
+
 	$effect(() => {
 		if (createNameTouched) return;
 		if (!createToDestinationId) return;
@@ -190,9 +196,7 @@
 						<label class="ap-label" for="pk-from">From</label>
 						<select id="pk-from" class="ap-select" bind:value={createFromDestinationId}>
 							{#each data.destinations as d}
-								<option value={d.destination_id}>
-									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
-								</option>
+								<option value={d.destination_id}>{destOptionLabel(d)}</option>
 							{/each}
 						</select>
 					</div>
@@ -200,9 +204,7 @@
 						<label class="ap-label" for="pk-to">To</label>
 						<select id="pk-to" name="destination_id" class="ap-select" required bind:value={createToDestinationId}>
 							{#each data.destinations as d}
-								<option value={d.destination_id}>
-									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
-								</option>
+								<option value={d.destination_id}>{destOptionLabel(d)}</option>
 							{/each}
 						</select>
 						<p class="ap-muted" style="margin-top:0.4rem;">
@@ -214,9 +216,7 @@
 						<label class="ap-label" for="pk-to-single">Destination</label>
 						<select id="pk-to-single" name="destination_id" class="ap-select" required bind:value={createToDestinationId}>
 							{#each data.destinations as d}
-								<option value={d.destination_id}>
-									{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
-								</option>
+								<option value={d.destination_id}>{destOptionLabel(d)}</option>
 							{/each}
 						</select>
 						<p class="ap-muted" style="margin-top:0.4rem;">
@@ -315,7 +315,7 @@
 								<select id={`pd-${p.package_id}`} name="destination_id" class="ap-select" required>
 									{#each data.destinations as d}
 										<option value={d.destination_id} selected={p.destination_id === d.destination_id}>
-											{d.country_name}{d.city_name ? ` — ${d.city_name}` : ""}
+											{destOptionLabel(d)}
 										</option>
 									{/each}
 								</select>

@@ -75,6 +75,24 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			return json({ error: "Missing conversationId." }, { status: 400 });
 		}
 
+		const convo = await db
+			.select()
+			.from(conversation)
+			.where(eq(conversation.conversation_id, conversationId))
+			.limit(1);
+		const c = convo[0];
+		if (!c) {
+			return json({ error: "Conversation not found." }, { status: 404 });
+		}
+
+		const isAdmin = locals.user?.role === "ADMIN" || locals.user?.role === "SUPERADMIN";
+		if (!locals.user) {
+			return json({ error: "Unauthorized." }, { status: 401 });
+		}
+		if (!isAdmin && locals.user.user_id !== c.user_id) {
+			return json({ error: "Forbidden." }, { status: 403 });
+		}
+
 		const rows = await db
 			.select()
 			.from(message)

@@ -2,6 +2,12 @@ import type { PageServerLoad } from "./$types";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
+import {
+	CONTINENT_CAROUSEL_ORDER,
+	type Continent,
+	resolveDestinationContinent,
+} from "$lib/geo/countryContinent";
+import { compareDestinationsHubFirst } from "$lib/display/destination";
 
 type PackageCategory = (typeof schema.PACKAGE_CATEGORY)[number];
 
@@ -15,6 +21,8 @@ type PackageListItem = {
 	image_url: string | null;
 	destination_country: string;
 	destination_city: string | null;
+	/** Resolved continent for filters (from destination.continent or inferred). */
+	destination_continent: Continent | "Other";
 };
 
 type DestinationListItem = {
@@ -23,6 +31,7 @@ type DestinationListItem = {
 	city_name: string | null;
 	description: string | null;
 	image_cover: string | null;
+	continent: string | null;
 };
 
 function statusActiveOrNull() {
@@ -40,6 +49,7 @@ async function loadPackagesByCategory(category: PackageCategory): Promise<Packag
 			duration_days: schema.packageTable.duration_days,
 			destination_country: schema.destination.country_name,
 			destination_city: schema.destination.city_name,
+			destination_continent: schema.destination.continent,
 			destination_cover: schema.destination.image_cover,
 		})
 		.from(schema.packageTable)
@@ -74,6 +84,10 @@ async function loadPackagesByCategory(category: PackageCategory): Promise<Packag
 		duration_days: r.duration_days,
 		destination_country: r.destination_country,
 		destination_city: r.destination_city,
+		destination_continent: resolveDestinationContinent(
+			r.destination_continent,
+			r.destination_country,
+		),
 		image_url: firstImageByPackage.get(r.package_id) ?? r.destination_cover ?? null,
 	}));
 }
@@ -89,6 +103,7 @@ async function loadAllActivePackages(): Promise<PackageListItem[]> {
 			duration_days: schema.packageTable.duration_days,
 			destination_country: schema.destination.country_name,
 			destination_city: schema.destination.city_name,
+			destination_continent: schema.destination.continent,
 			destination_cover: schema.destination.image_cover,
 		})
 		.from(schema.packageTable)
@@ -123,44 +138,12 @@ async function loadAllActivePackages(): Promise<PackageListItem[]> {
 		duration_days: r.duration_days,
 		destination_country: r.destination_country,
 		destination_city: r.destination_city,
+		destination_continent: resolveDestinationContinent(
+			r.destination_continent,
+			r.destination_country,
+		),
 		image_url: firstImageByPackage.get(r.package_id) ?? r.destination_cover ?? null,
 	}));
-}
-
-function inferRegion(countryName: string): "Asia" | "Europe" | "America" | null {
-	// Simple mapping to keep the existing UI (Asia/Europe/America carousels).
-	// If new countries are added that don't match this list, they won't appear in these carousels.
-	const asia = new Set([
-		"Japan",
-		"China",
-		"South Korea",
-		"Korea",
-		"Singapore",
-		"Thailand",
-		"Vietnam",
-		"Philippines",
-		"Taiwan",
-		"Malaysia",
-		"Indonesia",
-	]);
-
-	const europe = new Set([
-		"France",
-		"Italy",
-		"Switzerland",
-		"Spain",
-		"Germany",
-		"UK",
-		"United Kingdom",
-		"Netherlands",
-	]);
-
-	const america = new Set(["USA", "United States", "Canada", "Mexico", "Brazil", "Argentina", "Chile"]);
-
-	if (asia.has(countryName)) return "Asia";
-	if (europe.has(countryName)) return "Europe";
-	if (america.has(countryName)) return "America";
-	return null;
 }
 
 export const load: PageServerLoad = async () => {
@@ -174,6 +157,7 @@ export const load: PageServerLoad = async () => {
 				city_name: schema.destination.city_name,
 				description: schema.destination.description,
 				image_cover: schema.destination.image_cover,
+				continent: schema.destination.continent,
 			})
 			.from(schema.destination)
 			.orderBy(desc(schema.destination.created_at)),
@@ -181,29 +165,42 @@ export const load: PageServerLoad = async () => {
 
 	const countries = Array.from(new Set(packages.map((p) => p.destination_country))).sort();
 
-	const destinationsByRegion: Record<"Asia" | "Europe" | "America", DestinationListItem[]> = {
+	const destinationsByContinent: Record<Continent, DestinationListItem[]> = {
+		Africa: [],
 		Asia: [],
 		Europe: [],
-		America: [],
+		"North America": [],
+		"South America": [],
+		Oceania: [],
 	};
+	const destinationsOther: DestinationListItem[] = [];
 
 	for (const d of destinations) {
-		const region = inferRegion(d.country_name);
-		if (!region) continue;
-		destinationsByRegion[region].push({
+		const r = resolveDestinationContinent(d.continent, d.country_name);
+		const item: DestinationListItem = {
 			destination_id: d.destination_id,
 			country_name: d.country_name,
 			city_name: d.city_name,
 			description: d.description,
 			image_cover: d.image_cover,
-		});
+			continent: d.continent,
+		};
+		if (r === "Other") destinationsOther.push(item);
+		else destinationsByContinent[r].push(item);
 	}
+
+	for (const k of Object.keys(destinationsByContinent) as Continent[]) {
+		destinationsByContinent[k].sort(compareDestinationsHubFirst);
+	}
+	destinationsOther.sort(compareDestinationsHubFirst);
 
 	return {
 		promoPackages,
 		packages,
 		countries,
-		destinationsByRegion,
+		destinationsByContinent,
+		destinationsOther,
+		continentCarouselOrder: [...CONTINENT_CAROUSEL_ORDER],
 	};
 };
 

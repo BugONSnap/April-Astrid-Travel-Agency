@@ -49,8 +49,13 @@
 									<div class="ap-muted">{b.email}</div>
 								</td>
 								<td>
-									{b.package_name}
-									<div class="ap-muted">Pkg #{b.package_id}</div>
+									{#if b.booking_kind === "SERVICE"}
+										{b.service_title ?? "Service"}
+										<div class="ap-muted">Service booking</div>
+									{:else}
+										{b.package_name}
+										<div class="ap-muted">Pkg #{b.package_id}</div>
+									{/if}
 								</td>
 								<td>
 									<div>{b.travel_date ? new Date(b.travel_date).toLocaleDateString() : "—"}</div>

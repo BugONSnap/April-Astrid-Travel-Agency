@@ -222,7 +222,7 @@
 			label: "Destinations",
 			caption: "Regions & cities",
 			value: data.stats.destinations,
-			accent: "emerald" as const,
+			accent: "emerald" as const, 
 		},
 		{
 			key: "packages",

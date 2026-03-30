@@ -39,6 +39,7 @@ export const load: PageServerLoad = async () => {
 			destination_id: schema.destination.destination_id,
 			country_name: schema.destination.country_name,
 			city_name: schema.destination.city_name,
+			continent: schema.destination.continent,
 		})
 		.from(schema.destination)
 		.orderBy(desc(schema.destination.created_at));

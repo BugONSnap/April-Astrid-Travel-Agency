@@ -1,6 +1,12 @@
 <script lang="ts">
 	import Header from '$lib/assets/header.svelte';
 	import Footer from '$lib/assets/footer.svelte';
+	import { resolveDestinationContinent } from '$lib/geo/countryContinent';
+	import {
+		compareDestinationsHubFirst,
+		destinationCardLabel,
+		packageDestinationCaption,
+	} from '$lib/display/destination';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -37,6 +43,12 @@
 
 	const starMarquee = $derived(marqueeItems(data.starPackages));
 	const featuredMarquee = $derived(marqueeItems(data.featuredPackages));
+
+	/** Home Destinations: first 8 only; 9th tile is “See more” → dashboard (logged in) or login. */
+	const destinationsPreview = $derived(
+		[...data.destinations].sort(compareDestinationsHubFirst).slice(0, 8),
+	);
+	const destinationsSeeMoreHref = $derived(data.user ? '/dashboard' : '/login');
 </script>
 
 <Header />
@@ -59,9 +71,9 @@
 								<h3>{p.package_name}</h3>
 								<p>
 									{formatPrice(p.price)}
-									{#if p.destination_city || p.destination_country}
+									{#if packageDestinationCaption(p.destination_city, p.destination_country)}
 										<span class="slide-caption-meta">
-											· {[p.destination_city, p.destination_country].filter(Boolean).join(', ')}
+											· {packageDestinationCaption(p.destination_city, p.destination_country)}
 										</span>
 									{/if}
 								</p>
@@ -153,7 +165,7 @@
 		</p>
 	{:else}
 		<div class="w-full max-w-[1100px] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-			{#each data.destinations as d (d.destination_id)}
+			{#each destinationsPreview as d (d.destination_id)}
 				<a
 					href="/packages"
 					class="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition"
@@ -161,18 +173,21 @@
 					{#if d.image_cover}
 						<img
 							src={d.image_cover}
-							alt={d.country_name}
+							alt={destinationCardLabel({ city_name: d.city_name, country_name: d.country_name })}
 							class="w-full h-40 object-cover"
 						/>
 					{:else}
 						<div
 							class="w-full h-40 bg-gradient-to-br from-[#c41e3a]/20 to-slate-800/30"
 							aria-hidden="true"
-						/>
+						></div>
 					{/if}
 					<div class="p-4">
 						<span class="block font-semibold text-lg text-gray-900">
-							{d.city_name ? `${d.city_name}, ` : ''}{d.country_name}
+							{destinationCardLabel({ city_name: d.city_name, country_name: d.country_name })}
+						</span>
+						<span class="mt-1 inline-block rounded-full bg-[#c41e3a]/10 px-2 py-0.5 text-xs font-semibold text-[#c41e3a]">
+							{resolveDestinationContinent(d.continent, d.country_name)}
 						</span>
 						{#if d.description}
 							<p class="mt-2 text-sm text-gray-600">{snippet(d.description, 96)}</p>
@@ -180,6 +195,15 @@
 					</div>
 				</a>
 			{/each}
+			<a
+				href={destinationsSeeMoreHref}
+				class="flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-[#c41e3a]/35 bg-white p-6 text-center shadow-sm transition hover:border-[#c41e3a]/60 hover:bg-[#c41e3a]/5 hover:shadow-md"
+			>
+				<span class="text-lg font-semibold text-[#c41e3a]">See more</span>
+				<span class="mt-2 text-sm text-gray-600">
+					{data.user ? 'View all destinations on your dashboard' : 'Sign in to explore all destinations'}
+				</span>
+			</a>
 		</div>
 	{/if}
 </section>
@@ -212,7 +236,7 @@
 						<div class="card-text-block">
 							<p>
 								{snippet(p.description) ||
-									`${formatPrice(p.price)} · ${[p.destination_city, p.destination_country].filter(Boolean).join(', ') || 'Package'}`}
+									`${formatPrice(p.price)} · ${packageDestinationCaption(p.destination_city, p.destination_country) || 'Package'}`}
 							</p>
 							<a href="/packages">Read more</a>
 						</div>
@@ -244,7 +268,7 @@
 						<div class="card-text-block">
 							<p>
 								{snippet(p.description) ||
-									`${formatPrice(p.price)} · ${[p.destination_city, p.destination_country].filter(Boolean).join(', ') || 'Package'}`}
+									`${formatPrice(p.price)} · ${packageDestinationCaption(p.destination_city, p.destination_country) || 'Package'}`}
 							</p>
 							<a href="/packages">Read more</a>
 						</div>
