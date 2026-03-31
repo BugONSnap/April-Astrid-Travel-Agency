@@ -8,6 +8,7 @@
 		packageDestinationCaption,
 	} from '$lib/display/destination';
 	import type { PageProps } from './$types';
+	import { onMount } from 'svelte';
 
 	let { data }: PageProps = $props();
 
@@ -33,6 +34,7 @@
 		data.promoPackages.length > 0 ? data.promoPackages : null,
 	);
 	const heroCount = $derived(heroSlides?.length ?? 1);
+	let heroIndex = $state(0);
 
 	function heroPrev(i: number) {
 		return (i - 1 + heroCount) % heroCount;
@@ -40,6 +42,18 @@
 	function heroNext(i: number) {
 		return (i + 1) % heroCount;
 	}
+
+	function setHero(i: number) {
+		heroIndex = ((i % heroCount) + heroCount) % heroCount;
+	}
+
+	onMount(() => {
+		if (!heroSlides || heroCount <= 1) return;
+		const t = setInterval(() => {
+			heroIndex = heroNext(heroIndex);
+		}, 5000);
+		return () => clearInterval(t);
+	});
 
 	const starMarquee = $derived(marqueeItems(data.starPackages));
 	const featuredMarquee = $derived(marqueeItems(data.featuredPackages));
@@ -59,9 +73,8 @@
 		<ul class="slides">
 			{#if heroSlides}
 				{#each heroSlides as p, i (p.package_id)}
-					<input type="radio" name="hero-carousel-slides" id={`hero-slide-${i}`} checked={i === 0} />
 					<li class="slide-container">
-						<div class="slide-image">
+						<div class="slide-image" class:is-active={i === heroIndex}>
 							{#if p.image_url}
 								<img src={p.image_url} alt="" />
 							{:else}
@@ -80,32 +93,41 @@
 							</div>
 						</div>
 						<div class="carousel-controls">
-							<label for={`hero-slide-${heroPrev(i)}`} class="prev-slide"><span>&lsaquo;</span></label>
-							<label for={`hero-slide-${heroNext(i)}`} class="next-slide"><span>&rsaquo;</span></label>
+							<button type="button" class="prev-slide" onclick={() => setHero(heroPrev(heroIndex))} aria-label="Previous slide">
+								<span>&lsaquo;</span>
+							</button>
+							<button type="button" class="next-slide" onclick={() => setHero(heroNext(heroIndex))} aria-label="Next slide">
+								<span>&rsaquo;</span>
+							</button>
 						</div>
 					</li>
 				{/each}
 				<div class="carousel-dots">
 					{#each heroSlides as _, i}
-						<label for={`hero-slide-${i}`} class="carousel-dot" id={`hero-dot-${i}`}></label>
+						<button
+							type="button"
+							class="carousel-dot"
+							class:is-active={i === heroIndex}
+							aria-label={`Go to slide ${i + 1}`}
+							onclick={() => setHero(i)}
+						></button>
 					{/each}
 				</div>
 			{:else}
-				<input type="radio" name="hero-carousel-slides" id="hero-slide-0" checked />
 				<li class="slide-container">
-					<div class="slide-image slide-image--placeholder">
+					<div class="slide-image slide-image--placeholder is-active">
 						<div class="slide-caption slide-caption--center">
 							<h3>More coming soon</h3>
 							<p>Promotional packages will show here when they are added.</p>
 						</div>
 					</div>
 					<div class="carousel-controls">
-						<label for="hero-slide-0" class="prev-slide"><span>&lsaquo;</span></label>
-						<label for="hero-slide-0" class="next-slide"><span>&rsaquo;</span></label>
+						<button type="button" class="prev-slide" aria-label="Previous slide" disabled><span>&lsaquo;</span></button>
+						<button type="button" class="next-slide" aria-label="Next slide" disabled><span>&rsaquo;</span></button>
 					</div>
 				</li>
 				<div class="carousel-dots">
-					<label for="hero-slide-0" class="carousel-dot" id="hero-dot-0"></label>
+					<button type="button" class="carousel-dot is-active" aria-label="Slide 1"></button>
 				</div>
 			{/if}
 		</ul>
@@ -178,7 +200,7 @@
 						/>
 					{:else}
 						<div
-							class="w-full h-40 bg-gradient-to-br from-[#c41e3a]/20 to-slate-800/30"
+							class="w-full h-40 bg-linear-to-br from-[#c41e3a]/20 to-slate-800/30"
 							aria-hidden="true"
 						></div>
 					{/if}
@@ -360,10 +382,6 @@
 		-webkit-touch-callout: none;
 	}
 
-	ul.slides input {
-		display: none;
-	}
-
 	.slide-container {
 		display: block;
 	}
@@ -377,6 +395,11 @@
 		left: 0;
 		opacity: 0;
 		transition: all 0.7s ease-in-out;
+	}
+	.slide-image.is-active {
+		opacity: 1;
+		transform: scale(1);
+		transition: opacity 1s ease-in-out;
 	}
 
 	.slide-image img {
@@ -468,7 +491,7 @@
 		pointer-events: none;
 	}
 
-	.carousel-controls label {
+	.carousel-controls button {
 		display: none;
 		position: absolute;
 		padding: 0 20px;
@@ -476,18 +499,21 @@
 		transition: opacity 0.2s;
 		cursor: pointer;
 		pointer-events: auto;
+		background: transparent;
+		border: 0;
+		color: inherit;
 	}
 
-	.slide-image:hover + .carousel-controls label,
-	.carousel-controls label:hover {
+	.slide-image:hover + .carousel-controls button,
+	.carousel-controls button:hover {
 		opacity: 1;
 	}
 
-	.hero-carousel:hover .carousel-controls label {
+	.hero-carousel:hover .carousel-controls button {
 		opacity: 0.5;
 	}
 
-	.hero-carousel:hover .carousel-controls label:hover {
+	.hero-carousel:hover .carousel-controls button:hover {
 		opacity: 1;
 	}
 
@@ -524,31 +550,11 @@
 		transition: opacity 0.2s;
 	}
 
-	input:checked + .slide-container .slide-image {
-		opacity: 1;
-		transform: scale(1);
-		transition: opacity 1s ease-in-out;
-	}
-
-	input:checked + .slide-container .carousel-controls label {
+	.slide-container .carousel-controls button {
 		display: block;
 	}
 
-	.slides:has(#hero-slide-0:checked) .carousel-dots label[for='hero-slide-0'],
-	.slides:has(#hero-slide-1:checked) .carousel-dots label[for='hero-slide-1'],
-	.slides:has(#hero-slide-2:checked) .carousel-dots label[for='hero-slide-2'],
-	.slides:has(#hero-slide-3:checked) .carousel-dots label[for='hero-slide-3'],
-	.slides:has(#hero-slide-4:checked) .carousel-dots label[for='hero-slide-4'],
-	.slides:has(#hero-slide-5:checked) .carousel-dots label[for='hero-slide-5'],
-	.slides:has(#hero-slide-6:checked) .carousel-dots label[for='hero-slide-6'],
-	.slides:has(#hero-slide-7:checked) .carousel-dots label[for='hero-slide-7'],
-	.slides:has(#hero-slide-8:checked) .carousel-dots label[for='hero-slide-8'],
-	.slides:has(#hero-slide-9:checked) .carousel-dots label[for='hero-slide-9'],
-	.slides:has(#hero-slide-10:checked) .carousel-dots label[for='hero-slide-10'],
-	.slides:has(#hero-slide-11:checked) .carousel-dots label[for='hero-slide-11'],
-	.slides:has(#hero-slide-12:checked) .carousel-dots label[for='hero-slide-12'],
-	.slides:has(#hero-slide-13:checked) .carousel-dots label[for='hero-slide-13'],
-	.slides:has(#hero-slide-14:checked) .carousel-dots label[for='hero-slide-14'] {
+	.carousel-dots .carousel-dot.is-active {
 		opacity: 1;
 	}
 

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { PageProps } from "./$types";
+	import { goto } from "$app/navigation";
+	import { get } from "svelte/store";
+	import { page } from "$app/stores";
 	import Header from "$lib/assets/header.svelte";
 	import Footer from "$lib/assets/footer.svelte";
 	import type { Continent } from "$lib/geo/countryContinent";
@@ -11,6 +14,19 @@
 	let continent = $state("All");
 	let maxPrice = $state(150000);
 	let duration = $state("All");
+
+	type PackageListItem = {
+		package_id: number;
+		name: string;
+		country: string;
+		destinationLine: string;
+		continent: Continent | "Other";
+		price: number;
+		duration: number;
+		image: string | null;
+		badge: string;
+		description: string | null;
+	};
 
 	const continentFilterOptions: (Continent | "Other" | "All")[] = [
 		"All",
@@ -25,6 +41,7 @@
 
 	const serverPackages = $derived(
 		(data.packages ?? []).map((p: any) => ({
+			package_id: p.package_id,
 			name: p.package_name,
 			country: p.destination_country,
 			destinationLine: packageDestinationCaption(p.destination_city, p.destination_country),
@@ -33,6 +50,7 @@
 			duration: p.duration_days ?? 9999,
 			image: p.image_url,
 			badge: p.category,
+			description: p.description ?? null,
 		})),
 	);
 
@@ -67,6 +85,66 @@
 			name: destinationCardLabel({ city_name: d.city_name, country_name: d.country_name }),
 			image: d.image_cover,
 		}));
+	}
+
+	let selectedDeal = $state<PackageListItem | null>(null);
+	let dealModalOpen = $state(false);
+	let dealSendBusy = $state(false);
+	let dealSendErr = $state("");
+
+	let userId = $state(0);
+	let canSendToChat = $state(false);
+	$effect(() => {
+		const u = get(page).data.user as { user_id?: number; role?: string } | undefined;
+		userId = (u?.user_id as number | undefined) ?? 0;
+		canSendToChat = userId !== 0 && (u?.role ?? "USER") === "USER";
+	});
+
+	function openDeal(pkg: PackageListItem) {
+		selectedDeal = pkg;
+		dealSendErr = "";
+		dealModalOpen = true;
+	}
+
+	function closeDeal() {
+		dealModalOpen = false;
+		selectedDeal = null;
+		dealSendBusy = false;
+		dealSendErr = "";
+	}
+
+	async function sendDealToChat() {
+		if (!selectedDeal || dealSendBusy) return;
+		dealSendErr = "";
+		dealSendBusy = true;
+		try {
+			if (!canSendToChat) {
+				await goto("/login");
+				return;
+			}
+
+			const res = await fetch("/api/user/booking-request", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					packageId: selectedDeal.package_id,
+					numberOfPeople: 1,
+					note: "Interested in this deal (sent from Packages → View Deal).",
+				}),
+			});
+			if (!res.ok) {
+				const j = await res.json().catch(() => ({}));
+				dealSendErr = typeof j.error === "string" ? j.error : "Could not send to chat.";
+				return;
+			}
+
+			closeDeal();
+			await goto("/userchat");
+		} catch {
+			dealSendErr = "Network error.";
+		} finally {
+			dealSendBusy = false;
+		}
 	}
 </script>
 
@@ -147,7 +225,11 @@
 						</p>
 						<div class="mt-4 flex items-center justify-between">
 							<p class="text-xl font-bold text-red-600">₱{pkg.price.toLocaleString()}</p>
-							<button type="button" class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700">
+							<button
+								type="button"
+								class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+								onclick={() => openDeal(pkg)}
+							>
 								View Deal
 							</button>
 						</div>
@@ -157,6 +239,104 @@
 		{/if}
 	</div>
 </section>
+
+{#if dealModalOpen && selectedDeal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+		role="dialog"
+		tabindex="0"
+		aria-modal="true"
+		aria-label="Deal details"
+		onclick={(e) => {
+			if (e.currentTarget === e.target) closeDeal();
+		}}
+		onkeydown={(e) => {
+			if (e.key === "Escape") closeDeal();
+		}}
+	>
+		<div class="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+			<button
+				type="button"
+				class="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-xl text-zinc-700 shadow hover:bg-white"
+				onclick={closeDeal}
+				aria-label="Close"
+			>
+				×
+			</button>
+
+			<div class="grid gap-0 md:grid-cols-[1.05fr_1fr]">
+				<div class="relative min-h-[220px] bg-zinc-100">
+					{#if selectedDeal.image}
+						<img src={selectedDeal.image} alt={selectedDeal.name} class="h-full w-full object-cover" />
+					{:else}
+						<div class="h-full w-full bg-linear-to-br from-red-900/15 to-slate-800/25" aria-hidden="true"></div>
+					{/if}
+					<div class="absolute left-4 top-4">
+						<span class="rounded-full bg-red-700 px-3 py-1 text-xs font-semibold text-white">
+							{selectedDeal.badge}
+						</span>
+					</div>
+				</div>
+
+				<div class="p-6">
+					<h2 class="text-xl font-bold text-zinc-900">{selectedDeal.name}</h2>
+					<p class="mt-1 text-sm text-zinc-600">
+						{selectedDeal.destinationLine} · {selectedDeal.continent}
+						{#if selectedDeal.duration < 9999}
+							· {selectedDeal.duration} days
+						{/if}
+					</p>
+
+					<p class="mt-4 text-2xl font-extrabold text-red-700">
+						₱{selectedDeal.price.toLocaleString("en-PH")}
+					</p>
+
+					{#if selectedDeal.description}
+						<p class="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
+							{selectedDeal.description}
+						</p>
+					{:else}
+						<p class="mt-4 text-sm text-zinc-600">No description provided yet.</p>
+					{/if}
+
+					{#if dealSendErr}
+						<p class="mt-3 text-sm text-red-800" role="alert">{dealSendErr}</p>
+					{/if}
+
+					<div class="mt-6 flex flex-wrap gap-3">
+						<button
+							type="button"
+							class="rounded-xl border border-red-900/15 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+							onclick={closeDeal}
+						>
+							Close
+						</button>
+						<button
+							type="button"
+							class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+							onclick={sendDealToChat}
+							disabled={dealSendBusy}
+						>
+							{dealSendBusy ? "Sending…" : "Send to chat"}
+						</button>
+						<a
+							href="/userchat"
+							class="inline-flex items-center justify-center rounded-xl border border-red-900/15 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+						>
+							Open chat
+						</a>
+					</div>
+
+					{#if !canSendToChat}
+						<p class="mt-3 text-xs text-zinc-600">
+							Log in as a customer to send this deal to support chat.
+						</p>
+					{/if}
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <section class="mx-auto max-w-7xl px-6 pb-20">
 	<h2 class="mb-6 text-3xl font-bold">Destinations by continent</h2>
