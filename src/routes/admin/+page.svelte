@@ -1,205 +1,94 @@
 <script lang="ts">
-	import {
-		ArcElement,
-		BarElement,
-		CategoryScale,
-		Chart,
-		Filler,
-		Legend,
-		LinearScale,
-		LineElement,
-		PointElement,
-		Tooltip,
-	} from "chart.js";
+	import AnimatedLineChart from "$lib/components/AnimatedLineChart.svelte";
 	import type { PageProps } from "./$types";
-
-	Chart.register(
-		ArcElement,
-		BarElement,
-		CategoryScale,
-		LinearScale,
-		PointElement,
-		LineElement,
-		Tooltip,
-		Legend,
-		Filler,
-	);
 
 	let { data }: PageProps = $props();
 
-	let bookingCanvas = $state<HTMLCanvasElement | null>(null);
-	let paymentCanvas = $state<HTMLCanvasElement | null>(null);
-	let trendCanvas = $state<HTMLCanvasElement | null>(null);
+	const brand = "#c41e3a";
 
-	/* `bind:this` on $state runs after `onMount`, so charts never mounted. Use $effect after canvases exist. */
-	$effect(() => {
-		const b = bookingCanvas;
-		const p = paymentCanvas;
-		const t = trendCanvas;
-		const charts = data.charts;
-		if (!b || !p || !t) return;
+	const seriesBookingStatus = $derived([
+		{
+			id: "booking-status",
+			label: "Bookings",
+			color: brand,
+			data: data.charts.bookingStatus.data.map((n) => Number(n) || 0),
+		},
+	]);
 
-		const brand = "#c41e3a";
-		const brandMid = "#991b1b";
-		const brandDeep = "#7f1d1d";
-		const muted = "#6b7280";
-		const grid = "rgba(127, 29, 29, 0.08)";
-		const emptyFill = "rgba(148, 163, 184, 0.35)";
+	const seriesPaymentStatus = $derived([
+		{
+			id: "payment-status",
+			label: "Payments",
+			color: "#0284c7",
+			data: data.charts.paymentStatus.data.map((n) => Number(n) || 0),
+		},
+	]);
 
-		const legend = {
-			position: "bottom" as const,
-			labels: {
-				boxWidth: 10,
-				padding: 12,
-				font: { size: 11 },
-				color: muted,
-			},
-		};
+	const seriesTrend = $derived([
+		{
+			id: "bookings-trend",
+			label: "New bookings",
+			color: brand,
+			data: data.charts.bookingsTrend.data.map((n) => Number(n) || 0),
+		},
+	]);
 
-		const bookingValues = charts.bookingStatus.data;
-		const bookingAllZero = bookingValues.every((n) => Number(n) === 0);
-		const bookingDisplay = bookingAllZero ? bookingValues.map(() => 1) : bookingValues;
-		const bookingColors = bookingAllZero
-			? bookingValues.map(() => emptyFill)
-			: ["#fca5a5", brand, brandMid, "#374151"];
+	function sum(nums: number[]) {
+		return nums.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+	}
 
-		const instances: Chart[] = [];
-
-		const payMax = Math.max(1, ...charts.paymentStatus.data.map((n) => Number(n)));
-		const trendMax = Math.max(1, ...charts.bookingsTrend.data.map((n) => Number(n)));
-
-		instances.push(
-			new Chart(b, {
-				type: "doughnut",
-				data: {
-					labels: charts.bookingStatus.labels,
-					datasets: [
-						{
-							data: bookingDisplay,
-							backgroundColor: bookingColors,
-							borderWidth: 0,
-							hoverOffset: 6,
-						},
-					],
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend,
-						tooltip: {
-							callbacks: {
-								label(ctx) {
-									const i = ctx.dataIndex;
-									const raw = charts.bookingStatus.data[i] ?? 0;
-									const label = charts.bookingStatus.labels[i] ?? "";
-									if (bookingAllZero) return `${label}: 0`;
-									return `${label}: ${raw}`;
-								},
-							},
-						},
-					},
-				},
-			}),
-		);
-
-		instances.push(
-			new Chart(p, {
-				type: "bar",
-				data: {
-					labels: charts.paymentStatus.labels,
-					datasets: [
-						{
-							label: "Payments",
-							data: charts.paymentStatus.data,
-							backgroundColor: [brandMid, brand],
-							borderRadius: 6,
-							borderSkipped: false,
-						},
-					],
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: { legend: { display: false } },
-					scales: {
-						x: {
-							grid: { display: false },
-							ticks: { color: muted, font: { size: 11 } },
-						},
-						y: {
-							beginAtZero: true,
-							suggestedMax: payMax,
-							grid: { color: grid },
-							ticks: {
-								color: muted,
-								font: { size: 11 },
-								precision: 0,
-							},
-						},
-					},
-				},
-			}),
-		);
-
-		instances.push(
-			new Chart(t, {
-				type: "line",
-				data: {
-					labels: charts.bookingsTrend.labels,
-					datasets: [
-						{
-							label: "New bookings",
-							data: charts.bookingsTrend.data,
-							borderColor: brand,
-							backgroundColor: "rgba(196, 30, 58, 0.12)",
-							tension: 0.35,
-							fill: true,
-							pointBackgroundColor: brandDeep,
-							pointBorderColor: "#fff",
-							pointBorderWidth: 2,
-							pointRadius: 4,
-							spanGaps: true,
-						},
-					],
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: { legend },
-					scales: {
-						x: {
-							grid: { display: false },
-							ticks: { color: muted, font: { size: 11 } },
-						},
-						y: {
-							beginAtZero: true,
-							suggestedMax: trendMax,
-							grid: { color: grid },
-							ticks: {
-								color: muted,
-								font: { size: 11 },
-								precision: 0,
-							},
-						},
-					},
-				},
-			}),
-		);
-
-		queueMicrotask(() => {
-			for (const c of instances) {
-				try {
-					c.resize();
-				} catch {
-					/* ignore */
-				}
+	function topIndex(nums: number[]) {
+		let best = 0;
+		let bestVal = -Infinity;
+		for (let i = 0; i < nums.length; i++) {
+			const v = nums[i] ?? 0;
+			if (v > bestVal) {
+				bestVal = v;
+				best = i;
 			}
-		});
+		}
+		return best;
+	}
 
-		return () => {
-			for (const c of instances) c.destroy();
-		};
+	const bookingReport = $derived.by(() => {
+		const labels = data.charts.bookingStatus.labels;
+		const values = data.charts.bookingStatus.data.map((n) => Number(n) || 0);
+		const total = sum(values);
+		if (total === 0) return "No bookings recorded yet across all statuses.";
+
+		const iTop = topIndex(values);
+		const topLabel = labels[iTop] ?? "Top status";
+		const topVal = values[iTop] ?? 0;
+		const pct = Math.round((topVal / total) * 100);
+		return `Total bookings: ${total}. Most common: ${topLabel} (${topVal}, ${pct}%).`;
+	});
+
+	const paymentReport = $derived.by(() => {
+		const labels = data.charts.paymentStatus.labels;
+		const values = data.charts.paymentStatus.data.map((n) => Number(n) || 0);
+		const total = sum(values);
+		if (total === 0) return "No payment records yet.";
+
+		const iPaid = labels.findIndex((l) => String(l).toUpperCase() === "PAID");
+		const iUnpaid = labels.findIndex((l) => String(l).toUpperCase() === "UNPAID");
+		const paid = iPaid >= 0 ? values[iPaid] ?? 0 : 0;
+		const unpaid = iUnpaid >= 0 ? values[iUnpaid] ?? 0 : 0;
+		const paidPct = total > 0 ? Math.round((paid / total) * 100) : 0;
+		return `Payment records: ${total}. Paid: ${paid} (${paidPct}%). Unpaid: ${unpaid}.`;
+	});
+
+	const trendReport = $derived.by(() => {
+		const labels = data.charts.bookingsTrend.labels;
+		const values = data.charts.bookingsTrend.data.map((n) => Number(n) || 0);
+		if (values.length === 0) return "No trend data available yet.";
+
+		const total = sum(values);
+		const last = values.at(-1) ?? 0;
+		const prev = values.length >= 2 ? values.at(-2) ?? 0 : 0;
+		const delta = last - prev;
+		const deltaWord = delta === 0 ? "no change" : delta > 0 ? `up ${delta}` : `down ${Math.abs(delta)}`;
+		const lastLabel = labels.at(-1) ?? "Latest day";
+		return `Last ${labels.length} days: ${total} new bookings. Latest (${lastLabel}): ${last} (${deltaWord} vs prior day).`;
 	});
 
 	const statCards = $derived([
@@ -338,22 +227,34 @@
 		</div>
 		<div class="charts-grid">
 			<div class="chart-card">
-				<h3 class="chart-card-title">Bookings by status</h3>
-				<div class="chart-canvas-wrap">
-					<canvas bind:this={bookingCanvas} aria-label="Doughnut chart of booking counts by status"></canvas>
-				</div>
+				<AnimatedLineChart
+					title="Bookings by status"
+					subtitle="Counts per status"
+					xLabels={data.charts.bookingStatus.labels}
+					series={seriesBookingStatus}
+					height={220}
+				/>
+				<p class="chart-report" aria-live="polite">{bookingReport}</p>
 			</div>
 			<div class="chart-card">
-				<h3 class="chart-card-title">Payments by status</h3>
-				<div class="chart-canvas-wrap">
-					<canvas bind:this={paymentCanvas} aria-label="Bar chart of payment counts by status"></canvas>
-				</div>
+				<AnimatedLineChart
+					title="Payments by status"
+					subtitle="Counts per payment status"
+					xLabels={data.charts.paymentStatus.labels}
+					series={seriesPaymentStatus}
+					height={220}
+				/>
+				<p class="chart-report" aria-live="polite">{paymentReport}</p>
 			</div>
 			<div class="chart-card chart-card--wide">
-				<h3 class="chart-card-title">New bookings (daily)</h3>
-				<div class="chart-canvas-wrap chart-canvas-wrap--trend">
-					<canvas bind:this={trendCanvas} aria-label="Line chart of new bookings per day"></canvas>
-				</div>
+				<AnimatedLineChart
+					title="New bookings (daily)"
+					subtitle={`Last ${data.charts.bookingsTrend.labels.length} days`}
+					xLabels={data.charts.bookingsTrend.labels}
+					series={seriesTrend}
+					height={260}
+				/>
+				<p class="chart-report" aria-live="polite">{trendReport}</p>
 			</div>
 		</div>
 	</section>
@@ -691,22 +592,11 @@
 		letter-spacing: -0.01em;
 	}
 
-	.chart-canvas-wrap {
-		position: relative;
-		height: 220px;
-		width: 100%;
-		min-height: 180px;
-	}
-
-	.chart-canvas-wrap--trend {
-		height: 260px;
-		min-height: 200px;
-	}
-
-	.chart-canvas-wrap canvas {
-		display: block;
-		width: 100%;
-		height: 100%;
+	.chart-report {
+		margin: 0.65rem 0 0;
+		font-size: 0.8125rem;
+		line-height: 1.45;
+		color: var(--dash-muted);
 	}
 
 	.section-head {
