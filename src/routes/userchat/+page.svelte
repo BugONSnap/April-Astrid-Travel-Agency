@@ -1,5 +1,9 @@
 <script lang="ts">
 	import Header from "$lib/assets/header.svelte";
+	import {
+		formatBookingRequestSummary,
+		parsePackageBookingRequestPayload,
+	} from "$lib/chat/bookingRequestPayload";
 	import { onMount, tick } from "svelte";
 	import { get } from "svelte/store";
 	import { page } from "$app/stores";
@@ -15,6 +19,7 @@
 		sent_at: string;
 		message_kind?: string | null;
 		booking_id?: number | null;
+		request_status?: string | null;
 	};
 
 	let messages = $state<ChatMessage[]>([]);
@@ -42,6 +47,16 @@
 	let bookingNote = $state("");
 	let bookingSubmitting = $state(false);
 	let bookingErr = $state("");
+
+	const selectedPackage = $derived(
+		bookingPackageId
+			? data.packages.find((p) => String(p.package_id) === bookingPackageId) ?? null
+			: null,
+	);
+
+	const estimatedTotal = $derived(
+		selectedPackage ? Math.round(Number(selectedPackage.price) * Number(bookingPax || 1)) : 0,
+	);
 
 	async function submitBookingRequest() {
 		if (!canChat || !bookingPackageId || bookingPax < 1 || bookingSubmitting) return;
@@ -77,19 +92,26 @@
 		bottomEl.scrollIntoView({ block: "end", behavior: "smooth" });
 	}
 
-	async function loadChat() {
+	type LoadChatOpts = { silent?: boolean };
+
+	async function loadChat(opts?: LoadChatOpts) {
 		if (!canChat) {
 			isBooting = false;
 			return;
 		}
 
 		errorMsg = "";
-		isLoading = true;
+		const silent = opts?.silent === true;
+		const prevLastId = messages.at(-1)?.message_id;
+		if (!silent) isLoading = true;
 		try {
 			const convRes = await fetch(`/api/auth/chat?scope=user-conversation&userId=${userId}`);
 			if (!convRes.ok) {
 				const err = await convRes.json().catch(() => ({}));
-				errorMsg = typeof err.error === "string" ? err.error : `Could not open chat (${convRes.status})`;
+				if (!silent) {
+					errorMsg =
+						typeof err.error === "string" ? err.error : `Could not open chat (${convRes.status})`;
+				}
 				return;
 			}
 			const convData = await convRes.json();
@@ -98,19 +120,23 @@
 			const msgRes = await fetch(`/api/auth/chat?scope=messages&conversationId=${conversationId}`);
 			if (!msgRes.ok) {
 				const err = await msgRes.json().catch(() => ({}));
-				errorMsg =
-					typeof err.error === "string" ? err.error : `Could not load messages (${msgRes.status})`;
-				messages = [];
+				if (!silent) {
+					errorMsg =
+						typeof err.error === "string" ? err.error : `Could not load messages (${msgRes.status})`;
+					messages = [];
+				}
 				return;
 			}
 			const data = await msgRes.json();
-			messages = Array.isArray(data) ? data : [];
+			const next = Array.isArray(data) ? data : [];
+			messages = next;
 			await tick();
-			scrollToBottom();
+			const newLastId = next.at(-1)?.message_id;
+			if (!silent || newLastId !== prevLastId) scrollToBottom();
 		} catch {
-			errorMsg = "Network error loading chat.";
+			if (!silent) errorMsg = "Network error loading chat.";
 		} finally {
-			isLoading = false;
+			if (!silent) isLoading = false;
 			isBooting = false;
 		}
 	}
@@ -162,7 +188,17 @@
 		}
 	}
 
-	onMount(loadChat);
+	onMount(() => {
+		void loadChat();
+		const pollMs = 12_000;
+		const id = setInterval(() => {
+			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+			const uid = (get(page).data.user?.user_id as number | undefined) ?? 0;
+			if (uid === 0) return;
+			void loadChat({ silent: true });
+		}, pollMs);
+		return () => clearInterval(id);
+	});
 </script>
 
 <svelte:head>
@@ -188,7 +224,8 @@
 			<div class="mb-6 rounded-2xl border border-red-900/10 bg-white p-4 shadow-sm">
 				<p class="text-xs font-semibold tracking-[0.12em] text-zinc-600 uppercase">Request a tour package</p>
 				<p class="mt-1 text-sm text-zinc-600">
-					Sends a structured request into this chat (not a confirmed booking until staff confirms).
+					Sends a request staff can <strong>approve or deny</strong> in admin chat. You’ll see a green confirmation when
+					approved.
 				</p>
 				<div class="mt-4 grid gap-3 sm:grid-cols-2">
 					<label class="block text-xs font-semibold text-zinc-700">
@@ -231,6 +268,35 @@
 						/>
 					</label>
 				</div>
+				{#if selectedPackage}
+					<div
+						class="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950"
+						aria-live="polite"
+					>
+						<p class="m-0 text-xs font-semibold tracking-wide text-amber-900 uppercase">Selected package</p>
+						<p class="mt-1 font-semibold text-zinc-900">{selectedPackage.package_name}</p>
+						<ul class="mt-2 list-none space-y-1 p-0 text-zinc-800">
+							<li>
+								<span class="text-zinc-600">Destination:</span>
+								{selectedPackage.destination_line}
+							</li>
+							<li>
+								<span class="text-zinc-600">Duration:</span>
+								{selectedPackage.duration_days != null
+									? `${selectedPackage.duration_days} days`
+									: "—"}
+							</li>
+							<li>
+								<span class="text-zinc-600">Listed price (per booking):</span>
+								₱{Number(selectedPackage.price).toLocaleString("en-PH")}
+							</li>
+							<li>
+								<span class="text-zinc-600">Estimated total ({bookingPax} guest{Number(bookingPax) === 1 ? "" : "s"}):</span>
+								<strong>₱{estimatedTotal.toLocaleString("en-PH")}</strong>
+							</li>
+						</ul>
+					</div>
+				{/if}
 				{#if bookingErr}
 					<p class="mt-2 text-sm text-red-800" role="alert">{bookingErr}</p>
 				{/if}
@@ -279,7 +345,7 @@
 					<button
 						type="button"
 						class="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/15"
-						onclick={loadChat}
+						onclick={() => void loadChat()}
 						disabled={isLoading}
 					>
 						Refresh
@@ -306,26 +372,59 @@
 							<div class="flex flex-col gap-2">
 								{#each messages as m (m.message_id)}
 									<div class={m.sender_id === userId ? "flex justify-end" : "flex justify-start"}>
-										<div
-											class={[
-												"max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[70%]",
-												m.message_kind === "booking_notice"
-													? "border border-emerald-400/50 bg-emerald-50 text-emerald-950"
-													: m.sender_id === userId
-														? "bg-red-700 text-white"
-														: "border border-red-900/10 bg-white text-zinc-900",
-											].join(" ")}
-										>
-											<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
-											{#if m.message_kind === "booking_notice"}
-												<a
-													href="/profile"
-													class="mt-2 inline-block text-xs font-semibold text-emerald-900 underline"
-												>
-													View in My Bookings →
-												</a>
-											{/if}
-										</div>
+										{#if m.message_kind === "booking_request"}
+											{@const rp = parsePackageBookingRequestPayload(m.message_text)}
+											{@const rs = m.request_status ?? "PENDING"}
+											<div
+												class={[
+													"max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[70%]",
+													"border border-amber-300/70 bg-amber-50 text-amber-950",
+												].join(" ")}
+											>
+												<p class="text-[11px] font-bold uppercase tracking-wide text-amber-900">
+													Booking request
+												</p>
+												{#if rp}
+													<p class="mt-1 whitespace-pre-wrap wrap-break-word">
+														{formatBookingRequestSummary(rp)}
+													</p>
+												{:else}
+													<p class="mt-1 whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
+												{/if}
+												<p class="mt-2 text-xs font-semibold text-amber-900">
+													{#if rs === "PENDING"}
+														Awaiting staff review…
+													{:else if rs === "APPROVED"}
+														Approved — see the green confirmation below.
+													{:else if rs === "DENIED"}
+														Declined — check staff reply in the thread.
+													{:else}
+														{rs}
+													{/if}
+												</p>
+											</div>
+										{:else}
+											<div
+												class={[
+													"max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[70%]",
+													m.message_kind === "booking_notice"
+														? "border border-emerald-400/50 bg-emerald-50 text-emerald-950"
+														: m.sender_id === userId
+															? "bg-red-700 text-white"
+															: "border border-red-900/10 bg-white text-zinc-900",
+												].join(" ")}
+											>
+												<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
+												{#if m.message_kind === "booking_notice"}
+													<a
+														href="/profile"
+														class="mt-2 inline-block text-xs font-semibold text-emerald-900 underline"
+													>
+														View in My Bookings →
+													</a>
+												{/if}
+											</div>
+										{/if}
 									</div>
 								{/each}
 								<div bind:this={bottomEl}></div>

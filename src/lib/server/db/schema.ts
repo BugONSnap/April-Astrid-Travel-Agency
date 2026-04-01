@@ -222,7 +222,7 @@ export const bookmark = pgTable("bookmark", {
 
 /* ================= MESSAGING: messages ================= */
 
-export const MESSAGE_KIND = ["text", "booking_notice"] as const;
+export const MESSAGE_KIND = ["text", "booking_notice", "booking_request"] as const;
 
 // messages (one-to-many inside conversation)
 export const message = pgTable("message", {
@@ -242,6 +242,9 @@ export const message = pgTable("message", {
 
   /** Populated when message_kind is booking_notice. */
   booking_id: integer("booking_id").references(() => booking.booking_id),
+
+  /** For message_kind booking_request: PENDING | APPROVED | DENIED */
+  request_status: text("request_status"),
 
   is_read: integer("is_read").default(0),
 

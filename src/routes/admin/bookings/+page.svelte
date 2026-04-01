@@ -53,8 +53,10 @@
 										{b.service_title ?? "Service"}
 										<div class="ap-muted">Service booking</div>
 									{:else}
-										{b.package_name}
-										<div class="ap-muted">Pkg #{b.package_id}</div>
+										{b.package_name ?? "—"}
+										<div class="ap-muted">
+											{b.package_id != null ? `Pkg #${b.package_id}` : "Package"}
+										</div>
 									{/if}
 								</td>
 								<td>

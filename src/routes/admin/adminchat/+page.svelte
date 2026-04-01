@@ -2,6 +2,10 @@
 	import { onMount } from "svelte";
 	import { get } from "svelte/store";
 	import { page } from "$app/stores";
+	import {
+		formatBookingRequestSummary,
+		parsePackageBookingRequestPayload,
+	} from "$lib/chat/bookingRequestPayload";
 	import type { PageProps } from "./$types";
 
 	let { data }: PageProps = $props();
@@ -12,6 +16,7 @@
 		message_text: string;
 		message_kind?: string | null;
 		booking_id?: number | null;
+		request_status?: string | null;
 	};
 
 	let conversations: Array<{
@@ -34,6 +39,7 @@
 	let bookingStatus = $state("CONFIRMED");
 	let bookingBusy = $state(false);
 	let bookingErr = $state("");
+	let requestActionBusy = $state<{ id: number; action: "approve" | "deny" } | null>(null);
 
 	let adminId = $state(0);
 	$effect(() => {
@@ -96,6 +102,29 @@
 		await openChat(selected);
 	}
 
+	async function actOnBookingRequest(messageId: number, action: "approve" | "deny") {
+		if (!selected || requestActionBusy !== null) return;
+		requestActionBusy = { id: messageId, action };
+		bookingErr = "";
+		try {
+			const res = await fetch("/api/admin/booking-request-action", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ messageId, action }),
+			});
+			if (!res.ok) {
+				const j = await res.json().catch(() => ({}));
+				bookingErr = typeof j.error === "string" ? j.error : "Could not update request.";
+				return;
+			}
+			await openChat(selected);
+		} catch {
+			bookingErr = "Network error.";
+		} finally {
+			requestActionBusy = null;
+		}
+	}
+
 	async function sendBookingConfirmation() {
 		if (!selected) return;
 		bookingErr = "";
@@ -151,7 +180,27 @@
 		}
 	}
 
-	onMount(loadConversations);
+	onMount(() => {
+		void loadConversations();
+		const inboxMs = 15_000;
+		const id = setInterval(() => {
+			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+			void loadConversations();
+		}, inboxMs);
+		return () => clearInterval(id);
+	});
+
+	/** Refresh open thread so booking confirmations from Record booking appear without manual refresh. */
+	$effect(() => {
+		const conv = selected;
+		if (!conv) return;
+		const threadMs = 10_000;
+		const id = setInterval(() => {
+			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+			void openChat(conv);
+		}, threadMs);
+		return () => clearInterval(id);
+	});
 </script>
 
 <svelte:head>
@@ -224,8 +273,13 @@
 							</label>
 						{:else}
 							<label class="admin-booking-field ap-span-2">
-								<span>Service title</span>
-								<input class="ap-input" bind:value={serviceTitle} placeholder="e.g. Tourist visa assistance" />
+								<span>Service (from Services Offered)</span>
+								<select bind:value={serviceTitle} class="ap-select">
+									<option value="">Choose…</option>
+									{#each data.servicesOffered as title}
+										<option value={title}>{title}</option>
+									{/each}
+								</select>
 							</label>
 						{/if}
 						<label class="admin-booking-field">
@@ -264,14 +318,58 @@
 
 			<div class="ap-chat-messages">
 				{#each messages as m (m.message_id)}
-					<div
-						class="ap-chat-bubble"
-						class:ap-chat-bubble--booking={m.message_kind === "booking_notice"}
-						class:ap-chat-bubble--me={adminId !== 0 && m.sender_id === adminId}
-						class:ap-chat-bubble--them={adminId === 0 || m.sender_id !== adminId}
-					>
-						<pre class="ap-chat-pre">{m.message_text}</pre>
-					</div>
+					{#if m.message_kind === "booking_request"}
+						{@const reqPayload = parsePackageBookingRequestPayload(m.message_text)}
+						{@const reqStatus = m.request_status ?? "PENDING"}
+						<div
+							class="ap-chat-bubble ap-chat-bubble--request"
+							class:ap-chat-bubble--them={true}
+						>
+							<p class="ap-request-kicker">Package booking request</p>
+							{#if reqPayload}
+								<pre class="ap-chat-pre">{formatBookingRequestSummary(reqPayload)}</pre>
+							{:else}
+								<pre class="ap-chat-pre">{m.message_text}</pre>
+							{/if}
+							<p class="ap-request-status">
+								Status:
+								<strong>{reqStatus}</strong>
+							</p>
+							{#if reqStatus === "PENDING" && adminId !== 0}
+								<div class="ap-request-actions">
+									<button
+										type="button"
+										class="ap-btn ap-btn--primary ap-btn--sm"
+										disabled={requestActionBusy !== null}
+										onclick={() => actOnBookingRequest(m.message_id, "approve")}
+									>
+										{requestActionBusy?.id === m.message_id && requestActionBusy?.action === "approve"
+											? "Working…"
+											: "Approve"}
+									</button>
+									<button
+										type="button"
+										class="ap-btn ap-btn--secondary ap-btn--sm"
+										disabled={requestActionBusy !== null}
+										onclick={() => actOnBookingRequest(m.message_id, "deny")}
+									>
+										{requestActionBusy?.id === m.message_id && requestActionBusy?.action === "deny"
+											? "Working…"
+											: "Deny"}
+									</button>
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<div
+							class="ap-chat-bubble"
+							class:ap-chat-bubble--booking={m.message_kind === "booking_notice"}
+							class:ap-chat-bubble--me={adminId !== 0 && m.sender_id === adminId}
+							class:ap-chat-bubble--them={adminId === 0 || m.sender_id !== adminId}
+						>
+							<pre class="ap-chat-pre">{m.message_text}</pre>
+						</div>
+					{/if}
 				{/each}
 			</div>
 			<div class="ap-chat-input-row">
@@ -356,5 +454,34 @@
 		font-family: inherit;
 		font-size: 0.875rem;
 		line-height: 1.45;
+	}
+
+	.ap-chat-bubble--request {
+		max-width: 95% !important;
+		border: 1px solid rgba(217, 119, 6, 0.45);
+		background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(255, 255, 255, 0.96)) !important;
+		color: #78350f !important;
+		align-self: flex-start;
+	}
+
+	.ap-request-kicker {
+		margin: 0 0 0.35rem;
+		font-size: 0.6875rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #92400e;
+	}
+
+	.ap-request-status {
+		margin: 0.5rem 0 0;
+		font-size: 0.8125rem;
+	}
+
+	.ap-request-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.65rem;
 	}
 </style>

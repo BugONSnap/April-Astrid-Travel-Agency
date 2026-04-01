@@ -32,6 +32,8 @@ export const load: PageServerLoad = async () => {
 			last_name: schema.user.last_name,
 			email: schema.user.email,
 			package_name: schema.packageTable.package_name,
+			booking_kind: schema.booking.booking_kind,
+			service_title: schema.booking.service_title,
 			booking_status: schema.booking.booking_status,
 			payment_status: schema.booking.payment_status,
 		})

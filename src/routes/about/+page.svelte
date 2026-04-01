@@ -12,31 +12,34 @@
 		</h1>
 
 		<p class="text-sm sm:text-base leading-relaxed text-center max-w-3xl mx-auto">
-			Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien
-			vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis.
-			Tempus leo ac ornare sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus
-			blandit egestas. Iaculis massa nisl malesuada laoreet integer nunc posuere. Ut hendrerit
-			semper vel idis erat aptent taciti sociosqu. Ad litora torquent per conubia nostra
-			inetos himenaeos.
+			We are a dedicated international travel and tour booking platform committed to making
+			your dream destinations accessible and hassle-free. From breathtaking island getaways
+			to cultural city tours across the globe, we connect travelers with trusted partners
+			and curated experiences. Our goal is to provide seamless booking, competitive pricing,
+			and unforgettable journeys for every type of traveler.
 		</p>
 
 		<div
 			class="mt-10 bg-[#c41e3a] text-white rounded-xl shadow-lg px-5 sm:px-10 py-6 sm:py-8 flex flex-col sm:flex-row items-center gap-6"
 		>
-			<div
-				class="w-28 h-28 sm:w-40 sm:h-40 rounded-full bg-gray-200 border border-gray-300 shrink-0"
-			></div>
+			<!-- Owner Image -->
+			<img
+				src="/Owner.jpg"
+				alt="Owner"
+				class="w-28 h-28 sm:w-40 sm:h-40 rounded-full object-cover border border-gray-300 shrink-0"
+			/>
 
 			<div class="flex-1">
 				<p class="text-sm sm:text-base leading-relaxed">
-					Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque volutpat sapien
-					vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis.
-					Id cursus mi pretium tellus duis convallis.
+					Driven by passion for travel and customer satisfaction, our team ensures that every
+					booking is smooth, reliable, and tailored to your needs. We believe that travel is
+					more than just visiting places — it’s about creating lasting memories and meaningful
+					experiences.
 				</p>
 
 				<div class="mt-4">
 					<p class="text-sm sm:text-base font-semibold">April Rose Quidet</p>
-					<p class="text-xs sm:text-sm">Owner</p>
+					<p class="text-xs sm:text-sm">Founder & Owner</p>
 				</div>
 			</div>
 		</div>
@@ -65,7 +68,6 @@
 <Footer />
 
 <style>
-	/* Partners styling reused from home page */
 	.partners-section {
 		width: 100%;
 		padding: 3rem 1rem 4rem;
@@ -102,8 +104,6 @@
 	.partners-logo img {
 		max-width: 100%;
 		max-height: 80px;
-		width: auto;
-		height: auto;
 		object-fit: contain;
 	}
 

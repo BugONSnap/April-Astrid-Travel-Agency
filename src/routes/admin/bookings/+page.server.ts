@@ -1,6 +1,6 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { fail, redirect } from "@sveltejs/kit";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 
@@ -64,6 +64,13 @@ export const actions: Actions = {
 				return fail(400, { message: "Invalid payment_status" });
 			}
 
+			const [existingBooking] = await db
+				.select({ total_price: schema.booking.total_price })
+				.from(schema.booking)
+				.where(eq(schema.booking.booking_id, booking_id))
+				.limit(1);
+			if (!existingBooking) return fail(404, { message: "Booking not found" });
+
 			await db
 				.update(schema.booking)
 				.set({
@@ -79,6 +86,24 @@ export const actions: Actions = {
 					payment_status: payment_statusRaw as (typeof schema.PAYMENT_STATUS)[number],
 				})
 				.where(eq(schema.payment.booking_id, booking_id));
+
+			// Ledger: if marked PAID and there is no payment row yet, create one (admin Payments page).
+			if (payment_statusRaw === "PAID") {
+				const [cntRow] = await db
+					.select({ n: count() })
+					.from(schema.payment)
+					.where(eq(schema.payment.booking_id, booking_id));
+				const n = Number(cntRow?.n ?? 0);
+				if (n === 0) {
+					await db.insert(schema.payment).values({
+						booking_id,
+						amount: existingBooking.total_price,
+						payment_status: "PAID",
+						payment_method: "Recorded in Bookings",
+						transaction_reference: `BOOKING-${booking_id}`,
+					});
+				}
+			}
 
 			throw redirect(303, "/admin/bookings");
 		},

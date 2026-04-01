@@ -1,5 +1,9 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { and, eq, isNull, or } from "drizzle-orm";
+import {
+	formatBookingRequestSummary,
+	type PackageBookingRequestPayloadV1,
+} from "$lib/chat/bookingRequestPayload";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 
@@ -13,7 +17,7 @@ function statusActiveOrNull() {
 	return or(eq(schema.packageTable.status, "active"), isNull(schema.packageTable.status));
 }
 
-/** User posts a structured booking *request* into chat (no booking row until admin confirms). */
+/** User posts a structured booking *request* into chat (no booking row until staff approves in admin chat). */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user || locals.user.role !== "USER") {
 		return json({ error: "Please log in as a customer." }, { status: 401 });
@@ -37,6 +41,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.select({
 			package_name: schema.packageTable.package_name,
 			price: schema.packageTable.price,
+			duration_days: schema.packageTable.duration_days,
 			country: schema.destination.country_name,
 			city: schema.destination.city_name,
 		})
@@ -50,31 +55,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ error: "Package not found or inactive." }, { status: 404 });
 	}
 
-	let travelLine = "Preferred travel date: TBD";
+	const destLabel = [pkg.city, pkg.country].filter(Boolean).join(", ") || pkg.country;
+	let travelDate: string | null = null;
 	if (typeof travelRaw === "string" && travelRaw.trim()) {
 		const d = new Date(`${travelRaw.trim()}T12:00:00`);
 		if (!Number.isNaN(d.getTime())) {
-			travelLine = `Preferred travel date: ${d.toLocaleDateString("en-PH", {
-				year: "numeric",
-				month: "short",
-				day: "numeric",
-			})}`;
+			const y = d.getFullYear();
+			const m = String(d.getMonth() + 1).padStart(2, "0");
+			const day = String(d.getDate()).padStart(2, "0");
+			travelDate = `${y}-${m}-${day}`;
 		}
 	}
 
-	const destLabel = [pkg.city, pkg.country].filter(Boolean).join(", ") || pkg.country;
-	const lines = [
-		"📋 Booking request (package)",
-		`• Package: ${pkg.package_name}`,
-		`• Destination: ${destLabel}`,
-		`• Listed price: ₱${Number(pkg.price).toLocaleString("en-PH")}`,
-		`• Guests: ${numberOfPeople}`,
-		`• ${travelLine}`,
-	];
-	if (note) lines.push(`• Note: ${note}`);
-	lines.push("", "— Awaiting staff confirmation in this chat.");
-
-	const text = lines.join("\n");
+	const payload: PackageBookingRequestPayloadV1 = {
+		v: 1,
+		kind: "package",
+		packageId,
+		packageName: pkg.package_name,
+		listedPrice: Number(pkg.price) || 0,
+		destinationLine: destLabel,
+		durationDays: pkg.duration_days,
+		numberOfPeople,
+		travelDate,
+		note: note || null,
+	};
 
 	const existing = await db
 		.select()
@@ -99,8 +103,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.values({
 			conversation_id: convoId,
 			sender_id: locals.user.user_id,
-			message_text: text,
-			message_kind: "text",
+			message_text: JSON.stringify(payload),
+			message_kind: "booking_request",
+			request_status: "PENDING",
 		})
 		.returning();
 
@@ -109,6 +114,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			ok: true,
 			conversationId: convoId,
 			messageId: createdMessage?.message_id ?? null,
+			summary: formatBookingRequestSummary(payload),
+			sync: { pollRecommendedMs: 12_000 },
 		},
 		{ status: 201 },
 	);

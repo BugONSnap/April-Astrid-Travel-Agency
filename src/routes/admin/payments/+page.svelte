@@ -30,7 +30,10 @@
 						{#each data.bookings as b}
 							<option value={b.booking_id}>
 								#{b.booking_id} — {b.first_name}
-								{b.last_name} — {b.package_name ?? "Package"}
+								{b.last_name} —
+								{b.booking_kind === "SERVICE"
+									? (b.service_title ?? "Service")
+									: (b.package_name ?? "Package")}
 							</option>
 						{/each}
 					</select>

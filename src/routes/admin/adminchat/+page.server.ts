@@ -1,4 +1,5 @@
 import type { PageServerLoad } from "./$types";
+import { SERVICES_OFFERED_TITLES } from "$lib/data/servicesOffered";
 import { desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
@@ -9,7 +10,10 @@ function statusActiveOrNull() {
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || (locals.user.role !== "ADMIN" && locals.user.role !== "SUPERADMIN")) {
-		return { packages: [] as { package_id: number; package_name: string; price: number }[] };
+		return {
+			packages: [] as { package_id: number; package_name: string; price: number }[],
+			servicesOffered: [] as string[],
+		};
 	}
 
 	const rows = await db
@@ -23,5 +27,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.orderBy(desc(schema.packageTable.created_at))
 		.limit(500);
 
-	return { packages: rows };
+	return {
+		packages: rows,
+		servicesOffered: [...SERVICES_OFFERED_TITLES],
+	};
 };
