@@ -329,9 +329,7 @@
 	<h2 class="partners-title">Partners</h2>
 	<div class="partners-grid">
 		<div class="partners-logo"><img src="/partner1.png" alt="BOSZTAA" /></div>
-		<div class="partners-logo"><img src="/partner2.png" alt="GTBA" /></div>
 		<div class="partners-logo"><img src="/partner3.png" alt="Department of Tourism Philippines" /></div>
-		<div class="partners-logo"><img src="/partner4.png" alt="NAITAS" /></div>
 		<div class="partners-logo"><img src="/partner6.png" alt="Cebu Pacific" /></div>
 		<div class="partners-logo"><img src="/partner7.png" alt="AirAsia" /></div>
 		<div class="partners-logo"><img src="/partner8.png" alt="Singapore Airlines" /></div>
