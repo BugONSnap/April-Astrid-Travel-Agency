@@ -3,6 +3,7 @@
 	import { goto } from "$app/navigation";
 	import { get } from "svelte/store";
 	import { page } from "$app/stores";
+	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import Header from "$lib/assets/header.svelte";
 	import Footer from "$lib/assets/footer.svelte";
 	import type { Continent } from "$lib/geo/countryContinent";
@@ -123,17 +124,26 @@
 				return;
 			}
 
+			const body = {
+				packageId: selectedDeal.package_id,
+				numberOfPeople: 1,
+				note: "Interested in this deal (sent from Packages → View Deal).",
+			};
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
 			const res = await fetch("/api/user/booking-request", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					packageId: selectedDeal.package_id,
-					numberOfPeople: 1,
-					note: "Interested in this deal (sent from Packages → View Deal).",
-				}),
+				body: JSON.stringify(encryptedBody),
 			});
 			if (!res.ok) {
-				const j = await res.json().catch(() => ({}));
+				const encryptedResponse = await res.text();
+				let j: any = {};
+				try {
+					j = JSON.parse(await decryptPayload(encryptedResponse));
+				} catch {
+					j = {};
+				}
 				dealSendErr = typeof j.error === "string" ? j.error : "Could not send to chat.";
 				return;
 			}

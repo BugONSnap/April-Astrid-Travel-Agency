@@ -75,7 +75,7 @@
 			<a href="/servoffered" class="py-2 hover:underline font-medium text-base">Other Services</a>
 			<a href="/about" class="py-2 hover:underline font-medium text-base">About us</a>
 			{#if user}
-				<a href="/messages" class="py-2 hover:underline font-medium text-base">Messages</a>
+				<a href="/userchat" class="py-2 hover:underline font-medium text-base">Messages</a>
 			{/if}
 			<a href={accountHref} class="inline-flex items-center gap-2 py-2 font-medium text-base">
 				<span>{accountLabel}</span>

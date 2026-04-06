@@ -5,6 +5,7 @@ import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { hashPassword } from "$lib/server/auth";
 import { env } from "process";
+import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 
 function hashToken(token: string): string {
 	return createHash("sha256").update(token).digest("hex");
@@ -12,28 +13,35 @@ function hashToken(token: string): string {
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		let body: unknown;
+		let encryptedBody: unknown;
 		try {
-			body = await request.json();
+			encryptedBody = await request.json();
 		} catch {
-			return json({ message: "Invalid JSON body" }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid JSON body" })), { status: 400 });
 		}
 
-		if (!body || typeof body !== "object") {
-			return json({ message: "Invalid body" }, { status: 400 });
+		if (!encryptedBody || typeof encryptedBody !== "object") {
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid body" })), { status: 400 });
 		}
 
-		const { token, newPassword } = body as {
+		let bodyJson: string;
+		try {
+			bodyJson = await decryptPayload(encryptedBody as { iv: string; ciphertext: string });
+		} catch {
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid encrypted payload" })), { status: 400 });
+		}
+
+		const { token, newPassword } = JSON.parse(bodyJson) as {
 			token?: unknown;
 			newPassword?: unknown;
 		};
 
 		if (typeof token !== "string" || token.trim() === "") {
-			return json({ message: "Reset token is required" }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ message: "Reset token is required" })), { status: 400 });
 		}
 		if (typeof newPassword !== "string" || newPassword.trim().length < 8) {
 			return json(
-				{ message: "Password must be at least 8 characters" },
+				await encryptPayload(JSON.stringify({ message: "Password must be at least 8 characters" })),
 				{ status: 400 },
 			);
 		}
@@ -57,7 +65,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const userId = rows[0]?.user_id;
 		if (!userId) {
-			return json({ message: "Invalid or expired reset token" }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid or expired reset token" })), { status: 400 });
 		}
 
 		const hashed = await hashPassword(newPassword);
@@ -71,14 +79,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			.set({ used_at: new Date() })
 			.where(eq(schema.passwordResetToken.token_hash, tokenHash));
 
-		return json({ ok: true });
+		return json(await encryptPayload(JSON.stringify({ ok: true })));
 	} catch (err) {
 		console.error("[reset-password] error:", err);
 		return json(
-			{
+			await encryptPayload(JSON.stringify({
 				message: "Internal error",
 				details: env.NODE_ENV !== "production" && err instanceof Error ? err.message : undefined,
-			},
+			})),
 			{ status: 500 },
 		);
 	}

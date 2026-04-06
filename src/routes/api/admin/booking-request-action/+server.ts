@@ -4,6 +4,7 @@ import { parsePackageBookingRequestPayload } from "$lib/chat/bookingRequestPaylo
 import { createBookingFromChatAndNotify } from "$lib/server/chatBooking";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
+import { decryptPayload, encryptPayload, type EncryptedPayload } from "$lib/payloadEncryption";
 
 function toInt(v: unknown): number | null {
 	if (v == null) return null;
@@ -13,20 +14,29 @@ function toInt(v: unknown): number | null {
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user || (locals.user.role !== "ADMIN" && locals.user.role !== "SUPERADMIN")) {
-		return json({ error: "Forbidden." }, { status: 403 });
+		return json(await encryptPayload(JSON.stringify({ error: "Forbidden." })), { status: 403 });
 	}
 
-	const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-	if (!body) return json({ error: "Invalid JSON." }, { status: 400 });
+	const encryptedBody = (await request.json().catch(() => null)) as EncryptedPayload | null;
+	if (!encryptedBody) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid request." })), { status: 400 });
+	}
+
+	let body: Record<string, unknown>;
+	try {
+		body = JSON.parse(await decryptPayload(encryptedBody));
+	} catch (e) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid encrypted payload." })), { status: 400 });
+	}
 
 	const messageId = toInt(body.messageId);
 	const action = body.action === "deny" ? "deny" : body.action === "approve" ? "approve" : null;
 	if (!messageId || !action) {
-		return json({ error: "messageId and action (approve|deny) are required." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "messageId and action (approve|deny) are required." })), { status: 400 });
 	}
 
 	const adminUserId = locals.user.user_id;
-	if (!adminUserId) return json({ error: "Unauthorized." }, { status: 401 });
+	if (!adminUserId) return json(await encryptPayload(JSON.stringify({ error: "Unauthorized." })), { status: 401 });
 
 	const [row] = await db
 		.select()
@@ -34,14 +44,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.where(eq(schema.message.message_id, messageId))
 		.limit(1);
 
-	if (!row) return json({ error: "Message not found." }, { status: 404 });
+	if (!row) return json(await encryptPayload(JSON.stringify({ error: "Message not found." })), { status: 404 });
 	if (row.message_kind !== "booking_request") {
-		return json({ error: "Not a booking request message." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "Not a booking request message." })), { status: 400 });
 	}
 
 	const status = row.request_status ?? "PENDING";
 	if (status !== "PENDING") {
-		return json({ error: `This request was already ${status}.` }, { status: 409 });
+		return json(await encryptPayload(JSON.stringify({ error: `This request was already ${status}.` })), { status: 409 });
 	}
 
 	const [conv] = await db
@@ -49,11 +59,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.from(schema.conversation)
 		.where(eq(schema.conversation.conversation_id, row.conversation_id))
 		.limit(1);
-	if (!conv) return json({ error: "Conversation not found." }, { status: 404 });
+	if (!conv) return json(await encryptPayload(JSON.stringify({ error: "Conversation not found." })), { status: 404 });
 
 	const payload = parsePackageBookingRequestPayload(row.message_text);
 	if (!payload) {
-		return json({ error: "Could not read booking request data." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "Could not read booking request data." })), { status: 400 });
 	}
 
 	if (action === "deny") {
@@ -70,7 +80,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			message_kind: "text",
 		});
 
-		return json({ ok: true, action: "denied" }, { status: 200 });
+		return json(await encryptPayload(JSON.stringify({ ok: true, action: "denied" })), { status: 200 });
 	}
 
 	// approve
@@ -109,12 +119,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.where(eq(schema.message.message_id, messageId));
 
 	return json(
-		{
+		await encryptPayload(JSON.stringify({
 			ok: true,
 			action: "approved",
 			booking_id: result.booking_id,
 			message_id: result.message_id,
-		},
+		})),
 		{ status: 200 },
 	);
 };

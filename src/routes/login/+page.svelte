@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto, invalidate } from "$app/navigation";
-
+import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 	type Tab = 'login' | 'register';
 
 	let activeTab: Tab = 'login';
@@ -33,22 +33,38 @@
 	$: passwordMismatch =
 		regConfirmPassword.length > 0 && regPassword !== regConfirmPassword;
 
+	async function sendEncryptedRequest(url: string, payload: Record<string, unknown>) {
+		const encrypted = await encryptPayload(JSON.stringify(payload));
+		const res = await fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(encrypted),
+		});
+
+		const body = await res.json().catch(() => null);
+		if (!body || typeof body !== 'object') {
+			return { ok: res.ok, data: null };
+		}
+
+		try {
+			const decrypted = await decryptPayload(body as { iv: string; ciphertext: string });
+			return { ok: res.ok, data: JSON.parse(decrypted) };
+		} catch {
+			return { ok: res.ok, data: body };
+		}
+	}
+
 	async function login(e: Event) {
 		e.preventDefault();
 		formError = '';
 		submitting = true;
 		try {
-			const res = await fetch('/api/auth/login', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					email: loginEmail,
-					password: loginPassword
-				})
+			const { ok, data } = await sendEncryptedRequest('/api/auth/login', {
+				email: loginEmail,
+				password: loginPassword,
 			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				formError = typeof data.message === 'string' ? data.message : 'Login failed';
+			if (!ok) {
+				formError = typeof data?.message === 'string' ? data.message : 'Login failed';
 				return;
 			}
 			// Cookie was set by the API route; refresh root layout auth data
@@ -92,15 +108,12 @@
 
 		forgotSubmitting = true;
 		try {
-			const res = await fetch("/api/auth/forgot-password", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email: forgotEmail })
+			const { ok, data } = await sendEncryptedRequest("/api/auth/forgot-password", {
+				email: forgotEmail,
 			});
-			const data = await res.json().catch(() => ({}));
 
-			if (!res.ok) {
-				forgotError = typeof data.message === "string" ? data.message : "Request failed";
+			if (!ok) {
+				forgotError = typeof data?.message === "string" ? data.message : "Request failed";
 				return;
 			}
 
@@ -137,15 +150,13 @@
 
 		forgotSubmitting = true;
 		try {
-			const res = await fetch("/api/auth/reset-password", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ token: resetToken, newPassword: resetNewPassword })
+			const { ok, data } = await sendEncryptedRequest("/api/auth/reset-password", {
+				token: resetToken,
+				newPassword: resetNewPassword,
 			});
-			const data = await res.json().catch(() => ({}));
 
-			if (!res.ok) {
-				forgotError = typeof data.message === "string" ? data.message : "Reset failed";
+			if (!ok) {
+				forgotError = typeof data?.message === "string" ? data.message : "Reset failed";
 				return;
 			}
 
@@ -165,20 +176,15 @@
 
 		submitting = true;
 		try {
-			const res = await fetch('/api/auth/register', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					email: regEmail,
-					password: regPassword,
-					first_name: regFirstName,
-					last_name: regLastName
-				})
+			const { ok, data } = await sendEncryptedRequest('/api/auth/register', {
+				email: regEmail,
+				password: regPassword,
+				first_name: regFirstName,
+				last_name: regLastName,
 			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
+			if (!ok) {
 				formError =
-					typeof data.message === 'string' ? data.message : 'Registration failed';
+					typeof data?.message === 'string' ? data.message : 'Registration failed';
 				return;
 			}
 			// Same as login: ensure header/user UI updates immediately.

@@ -4,6 +4,7 @@
 		formatBookingRequestSummary,
 		parsePackageBookingRequestPayload,
 	} from "$lib/chat/bookingRequestPayload";
+	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import { onMount, tick } from "svelte";
 	import { get } from "svelte/store";
 	import { page } from "$app/stores";
@@ -63,18 +64,27 @@
 		bookingErr = "";
 		bookingSubmitting = true;
 		try {
+			const body = {
+				packageId: Number.parseInt(bookingPackageId, 10),
+				numberOfPeople: bookingPax,
+				travelDate: bookingTravel.trim() || undefined,
+				note: bookingNote.trim() || undefined,
+			};
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
 			const res = await fetch("/api/user/booking-request", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					packageId: Number.parseInt(bookingPackageId, 10),
-					numberOfPeople: bookingPax,
-					travelDate: bookingTravel.trim() || undefined,
-					note: bookingNote.trim() || undefined,
-				}),
+				body: JSON.stringify(encryptedBody),
 			});
 			if (!res.ok) {
-				const j = await res.json().catch(() => ({}));
+				const encryptedResponse = await res.text();
+				let j: any = {};
+				try {
+					j = JSON.parse(await decryptPayload(encryptedResponse));
+				} catch {
+					j = {};
+				}
 				bookingErr = typeof j.error === "string" ? j.error : "Could not send request.";
 				return;
 			}
@@ -107,19 +117,36 @@
 		try {
 			const convRes = await fetch(`/api/auth/chat?scope=user-conversation&userId=${userId}`);
 			if (!convRes.ok) {
-				const err = await convRes.json().catch(() => ({}));
+				const encryptedErrText = await convRes.text();
+				let err: any = {};
+				try {
+					const encryptedErr = JSON.parse(encryptedErrText);
+					err = JSON.parse(await decryptPayload(encryptedErr));
+				} catch {
+					err = {};
+				}
 				if (!silent) {
 					errorMsg =
 						typeof err.error === "string" ? err.error : `Could not open chat (${convRes.status})`;
 				}
 				return;
 			}
-			const convData = await convRes.json();
+			const encryptedConvText = await convRes.text();
+			const encryptedConv = JSON.parse(encryptedConvText);
+			const convDataStr = await decryptPayload(encryptedConv);
+			const convData = JSON.parse(convDataStr);
 			conversationId = convData.conversation_id;
 
 			const msgRes = await fetch(`/api/auth/chat?scope=messages&conversationId=${conversationId}`);
 			if (!msgRes.ok) {
-				const err = await msgRes.json().catch(() => ({}));
+				const encryptedErrText = await msgRes.text();
+				let err: any = {};
+				try {
+					const encryptedErr = JSON.parse(encryptedErrText);
+					err = JSON.parse(await decryptPayload(encryptedErr));
+				} catch {
+					err = {};
+				}
 				if (!silent) {
 					errorMsg =
 						typeof err.error === "string" ? err.error : `Could not load messages (${msgRes.status})`;
@@ -127,7 +154,10 @@
 				}
 				return;
 			}
-			const data = await msgRes.json();
+			const encryptedDataText = await msgRes.text();
+			const encryptedData = JSON.parse(encryptedDataText);
+			const dataStr = await decryptPayload(encryptedData);
+			const data = JSON.parse(dataStr);
 			const next = Array.isArray(data) ? data : [];
 			messages = next;
 			await tick();
@@ -161,17 +191,27 @@
 		isSending = true;
 		errorMsg = "";
 		try {
+			const body = {
+				conversationId,
+				senderId: userId,
+				text,
+			};
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
 			const res = await fetch("/api/auth/chat", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					conversationId,
-					senderId: userId,
-					text,
-				}),
+				body: JSON.stringify(encryptedBody),
 			});
 			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
+				const encryptedErrText = await res.text();
+				let err: any = {};
+				try {
+					const encryptedErr = JSON.parse(encryptedErrText);
+					err = JSON.parse(await decryptPayload(encryptedErr));
+				} catch {
+					err = {};
+				}
 				errorMsg = typeof err.error === "string" ? err.error : `Could not send (${res.status})`;
 				// rollback optimistic message
 				messages = messages.filter((m) => m.message_id !== optimistic.message_id);

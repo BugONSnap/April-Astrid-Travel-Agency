@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { createBookingFromChatAndNotify } from "$lib/server/chatBooking";
+import { decryptPayload, encryptPayload, type EncryptedPayload } from "$lib/payloadEncryption";
 
 function toInt(v: unknown): number | null {
 	if (v == null) return null;
@@ -12,12 +13,19 @@ function toInt(v: unknown): number | null {
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user || (locals.user.role !== "ADMIN" && locals.user.role !== "SUPERADMIN")) {
-		return json({ error: "Forbidden." }, { status: 403 });
+		return json(await encryptPayload(JSON.stringify({ error: "Forbidden." })), { status: 403 });
 	}
 
-	const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-	if (!body) {
-		return json({ error: "Invalid JSON." }, { status: 400 });
+	const encryptedBody = (await request.json().catch(() => null)) as EncryptedPayload | null;
+	if (!encryptedBody) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid request." })), { status: 400 });
+	}
+
+	let body: Record<string, unknown>;
+	try {
+		body = JSON.parse(await decryptPayload(encryptedBody));
+	} catch (e) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid encrypted payload." })), { status: 400 });
 	}
 
 	const conversationId = toInt(body.conversationId);
@@ -31,7 +39,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const bookingStatusRaw = body.bookingStatus;
 
 	if (!conversationId || !numberOfPeople || numberOfPeople < 1 || !totalPrice || totalPrice < 0) {
-		return json({ error: "conversationId, numberOfPeople, and totalPrice are required." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "conversationId, numberOfPeople, and totalPrice are required." })), { status: 400 });
 	}
 
 	let bookingStatus: (typeof schema.BOOKING_STATUS)[number] = "CONFIRMED";
@@ -55,11 +63,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.limit(1);
 	const conv = convRows[0];
 	if (!conv) {
-		return json({ error: "Conversation not found." }, { status: 404 });
+		return json(await encryptPayload(JSON.stringify({ error: "Conversation not found." })), { status: 404 });
 	}
 
 	if (!locals.user.user_id) {
-		return json({ error: "Unauthorized." }, { status: 401 });
+		return json(await encryptPayload(JSON.stringify({ error: "Unauthorized." })), { status: 401 });
 	}
 
 	try {
@@ -83,9 +91,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.where(eq(schema.conversation.conversation_id, conversationId));
 		}
 
-		return json(result, { status: 201 });
+		return json(await encryptPayload(JSON.stringify(result)), { status: 201 });
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : "Could not create booking.";
-		return json({ error: msg }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: msg })), { status: 400 });
 	}
 };

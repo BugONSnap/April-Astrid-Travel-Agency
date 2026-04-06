@@ -4,19 +4,27 @@ import { eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { hashPassword, setSessionCookie } from "$lib/server/auth";
+import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 
 const MIN_PASSWORD_LEN = 8;
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
-	let body: unknown;
+	let encryptedBody: unknown;
 	try {
-		body = await request.json();
+		encryptedBody = await request.json();
 	} catch {
-		return json({ message: "Invalid JSON body" }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid JSON body" })), { status: 400 });
 	}
 
-	if (!body || typeof body !== "object") {
-		return json({ message: "Invalid body" }, { status: 400 });
+	if (!encryptedBody || typeof encryptedBody !== "object") {
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid body" })), { status: 400 });
+	}
+
+	let bodyJson: string;
+	try {
+		bodyJson = await decryptPayload(encryptedBody as { iv: string; ciphertext: string });
+	} catch {
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid encrypted payload" })), { status: 400 });
 	}
 
 	const {
@@ -24,7 +32,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		password,
 		first_name,
 		last_name,
-	} = body as Record<string, unknown>;
+	} = JSON.parse(bodyJson) as Record<string, unknown>;
 
 	if (
 		typeof email !== "string" ||
@@ -33,10 +41,10 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		typeof last_name !== "string"
 	) {
 		return json(
-			{
+			await encryptPayload(JSON.stringify({
 				message:
 					"email, password, first_name, and last_name are required strings",
-			},
+			})),
 			{ status: 400 },
 		);
 	}
@@ -47,14 +55,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 	if (!normalizedEmail || !fn || !ln) {
 		return json(
-			{ message: "Email, first name, and last name must not be empty" },
+			await encryptPayload(JSON.stringify({ message: "Email, first name, and last name must not be empty" })),
 			{ status: 400 },
 		);
 	}
 
 	if (password.length < MIN_PASSWORD_LEN) {
 		return json(
-			{ message: `Password must be at least ${MIN_PASSWORD_LEN} characters` },
+			await encryptPayload(JSON.stringify({ message: `Password must be at least ${MIN_PASSWORD_LEN} characters` })),
 			{ status: 400 },
 		);
 	}
@@ -66,7 +74,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		.limit(1);
 
 	if (existing.length > 0) {
-		return json({ message: "An account with this email already exists" }, { status: 409 });
+		return json(await encryptPayload(JSON.stringify({ message: "An account with this email already exists" })), { status: 409 });
 	}
 
 	const passwordHash = await hashPassword(password);
@@ -103,7 +111,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	}
 
 	if (!user) {
-		return json({ message: "Registration failed" }, { status: 500 });
+		return json(await encryptPayload(JSON.stringify({ message: "Registration failed" })), { status: 500 });
 	}
 
 	try {
@@ -112,8 +120,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		const message =
 			err instanceof Error ? err.message : "Could not create session";
 		console.error("[register] session cookie:", err);
-		return json({ message }, { status: 500 });
+		return json(await encryptPayload(JSON.stringify({ message })), { status: 500 });
 	}
 
-	return json({ user });
+	return json(await encryptPayload(JSON.stringify({ user })));
 };

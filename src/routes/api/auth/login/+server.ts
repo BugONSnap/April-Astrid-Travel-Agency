@@ -7,28 +7,36 @@ import {
 	setSessionCookie,
 	verifyPassword,
 } from "$lib/server/auth";
+import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
-	let body: unknown;
+	let encryptedBody: unknown;
 	try {
-		body = await request.json();
+		encryptedBody = await request.json();
 	} catch {
-		return json({ message: "Invalid JSON body" }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid JSON body" })), { status: 400 });
 	}
 
-	if (!body || typeof body !== "object") {
-		return json({ message: "Invalid body" }, { status: 400 });
+	if (!encryptedBody || typeof encryptedBody !== "object") {
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid body" })), { status: 400 });
 	}
 
-	const { email, password } = body as Record<string, unknown>;
+	let bodyJson: string;
+	try {
+		bodyJson = await decryptPayload(encryptedBody as { iv: string; ciphertext: string });
+	} catch {
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid encrypted payload" })), { status: 400 });
+	}
+
+	const { email, password } = JSON.parse(bodyJson) as Record<string, unknown>;
 
 	if (typeof email !== "string" || typeof password !== "string") {
-		return json({ message: "Email and password are required" }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ message: "Email and password are required" })), { status: 400 });
 	}
 
 	const normalizedEmail = email.trim().toLowerCase();
 	if (!normalizedEmail || !password) {
-		return json({ message: "Email and password are required" }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ message: "Email and password are required" })), { status: 400 });
 	}
 
 	const rows = await db
@@ -52,7 +60,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
 	const ok = await verifyPassword(password, found.password);
 	if (!ok) {
-		return json({ message: "Invalid email or password" }, { status: 401 });
+		return json(await encryptPayload(JSON.stringify({ message: "Invalid email or password" })), { status: 401 });
 	}
 
 	try {
@@ -61,9 +69,9 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		const message =
 			err instanceof Error ? err.message : "Could not create session";
 		console.error("[login] session cookie:", err);
-		return json({ message }, { status: 500 });
+		return json(await encryptPayload(JSON.stringify({ message })), { status: 500 });
 	}
 
 	const { password: _p, ...user } = found;
-	return json({ user });
+	return json(await encryptPayload(JSON.stringify({ user })));
 };

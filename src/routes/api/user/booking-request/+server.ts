@@ -6,6 +6,7 @@ import {
 } from "$lib/chat/bookingRequestPayload";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
+import { decryptPayload, encryptPayload, type EncryptedPayload } from "$lib/payloadEncryption";
 
 function toInt(v: unknown): number | null {
 	if (v == null) return null;
@@ -17,15 +18,21 @@ function statusActiveOrNull() {
 	return or(eq(schema.packageTable.status, "active"), isNull(schema.packageTable.status));
 }
 
-/** User posts a structured booking *request* into chat (no booking row until staff approves in admin chat). */
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user || locals.user.role !== "USER") {
-		return json({ error: "Please log in as a customer." }, { status: 401 });
+		return json(await encryptPayload(JSON.stringify({ error: "Please log in as a customer." })), { status: 401 });
 	}
 
-	const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-	if (!body) {
-		return json({ error: "Invalid JSON." }, { status: 400 });
+	const encryptedBody = (await request.json().catch(() => null)) as EncryptedPayload | null;
+	if (!encryptedBody) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid request." })), { status: 400 });
+	}
+
+	let body: Record<string, unknown>;
+	try {
+		body = JSON.parse(await decryptPayload(encryptedBody));
+	} catch (e) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid encrypted payload." })), { status: 400 });
 	}
 
 	const packageId = toInt(body.packageId);
@@ -34,7 +41,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const travelRaw = body.travelDate;
 
 	if (!packageId || !numberOfPeople || numberOfPeople < 1) {
-		return json({ error: "packageId and numberOfPeople are required." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "packageId and numberOfPeople are required." })), { status: 400 });
 	}
 
 	const pkgRows = await db
@@ -52,7 +59,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const pkg = pkgRows[0];
 	if (!pkg) {
-		return json({ error: "Package not found or inactive." }, { status: 404 });
+		return json(await encryptPayload(JSON.stringify({ error: "Package not found or inactive." })), { status: 404 });
 	}
 
 	const destLabel = [pkg.city, pkg.country].filter(Boolean).join(", ") || pkg.country;
@@ -95,7 +102,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		convoId = created?.conversation_id;
 	}
 	if (!convoId) {
-		return json({ error: "Could not open chat." }, { status: 500 });
+		return json(await encryptPayload(JSON.stringify({ error: "Could not open chat." })), { status: 500 });
 	}
 
 	const [createdMessage] = await db
@@ -110,13 +117,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.returning();
 
 	return json(
-		{
+		await encryptPayload(JSON.stringify({
 			ok: true,
 			conversationId: convoId,
 			messageId: createdMessage?.message_id ?? null,
 			summary: formatBookingRequestSummary(payload),
 			sync: { pollRecommendedMs: 12_000 },
-		},
+		})),
 		{ status: 201 },
 	);
 };

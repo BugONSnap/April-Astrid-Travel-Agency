@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { env } from "process";
+import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 
 function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
@@ -15,20 +16,27 @@ function hashToken(token: string): string {
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		let body: unknown;
+		let encryptedBody: unknown;
 		try {
-			body = await request.json();
+			encryptedBody = await request.json();
 		} catch {
-			return json({ message: "Invalid JSON body" }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid JSON body" })), { status: 400 });
 		}
 
-		if (!body || typeof body !== "object") {
-			return json({ message: "Invalid body" }, { status: 400 });
+		if (!encryptedBody || typeof encryptedBody !== "object") {
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid body" })), { status: 400 });
 		}
 
-		const { email } = body as { email?: unknown };
+		let bodyJson: string;
+		try {
+			bodyJson = await decryptPayload(encryptedBody as { iv: string; ciphertext: string });
+		} catch {
+			return json(await encryptPayload(JSON.stringify({ message: "Invalid encrypted payload" })), { status: 400 });
+		}
+
+		const { email } = JSON.parse(bodyJson) as { email?: unknown };
 		if (typeof email !== "string" || email.trim() === "") {
-			return json({ message: "Email is required" }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ message: "Email is required" })), { status: 400 });
 		}
 
 		const normalizedEmail = normalizeEmail(email);
@@ -43,7 +51,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Always return 200 to avoid email enumeration.
 		if (!userId) {
-			return json({ ok: true });
+			return json(await encryptPayload(JSON.stringify({ ok: true })));
 		}
 
 		// Create token
@@ -73,17 +81,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		// In development, return the token so your popup can immediately proceed.
 		const debugReturnToken = env.NODE_ENV !== "production";
 
-		return json({
+		return json(await encryptPayload(JSON.stringify({
 			ok: true,
 			resetToken: debugReturnToken ? resetToken : undefined,
-		});
+		})));
 	} catch (err) {
 		console.error("[forgot-password] error:", err);
 		return json(
-			{
+			await encryptPayload(JSON.stringify({
 				message: "Internal error",
 				details: env.NODE_ENV !== "production" && err instanceof Error ? err.message : undefined,
-			},
+			})),
 			{ status: 500 },
 		);
 	}

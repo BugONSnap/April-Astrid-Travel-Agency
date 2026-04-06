@@ -2,6 +2,7 @@ import { json, type RequestHandler } from "@sveltejs/kit";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import { conversation, message, user } from "$lib/server/db/schema";
+import { encryptPayload } from "$lib/payloadEncryption";
 
 function toInt(value: string | null): number | null {
 	if (!value) return null;
@@ -15,12 +16,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const scope = url.searchParams.get("scope") as ChatScope | null;
 
 	if (!scope) {
-		return json({ error: "Missing scope query parameter." }, { status: 400 });
+		return json(await encryptPayload(JSON.stringify({ error: "Missing scope query parameter." })), { status: 400 });
 	}
 
 	if (scope === "conversations") {
 		if (!locals.user || (locals.user.role !== "ADMIN" && locals.user.role !== "SUPERADMIN")) {
-			return json({ error: "Forbidden." }, { status: 403 });
+			return json(await encryptPayload(JSON.stringify({ error: "Forbidden." })), { status: 403 });
 		}
 
 		const rows = await db
@@ -37,7 +38,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.leftJoin(user, eq(user.user_id, conversation.user_id))
 			.orderBy(desc(conversation.created_at));
 
-		return json(rows);
+		return json(await encryptPayload(JSON.stringify(rows)));
 	}
 
 	if (scope === "user-conversation") {
@@ -45,7 +46,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		const userId = locals.user?.user_id ?? requestedUserId;
 
 		if (!userId) {
-			return json({ error: "Missing userId." }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ error: "Missing userId." })), { status: 400 });
 		}
 
 		const existing = await db
@@ -55,7 +56,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.limit(1);
 
 		if (existing[0]) {
-			return json(existing[0]);
+			return json(await encryptPayload(JSON.stringify(existing[0])));
 		}
 
 		const [newConversation] = await db
@@ -65,14 +66,14 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			})
 			.returning();
 
-		return json(newConversation, { status: 201 });
+		return json(await encryptPayload(JSON.stringify(newConversation)), { status: 201 });
 	}
 
 	if (scope === "messages") {
 		const conversationId = toInt(url.searchParams.get("conversationId"));
 
 		if (!conversationId) {
-			return json({ error: "Missing conversationId." }, { status: 400 });
+			return json(await encryptPayload(JSON.stringify({ error: "Missing conversationId." })), { status: 400 });
 		}
 
 		const convo = await db
@@ -82,15 +83,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.limit(1);
 		const c = convo[0];
 		if (!c) {
-			return json({ error: "Conversation not found." }, { status: 404 });
+			return json(await encryptPayload(JSON.stringify({ error: "Conversation not found." })), { status: 404 });
 		}
 
 		const isAdmin = locals.user?.role === "ADMIN" || locals.user?.role === "SUPERADMIN";
 		if (!locals.user) {
-			return json({ error: "Unauthorized." }, { status: 401 });
+			return json(await encryptPayload(JSON.stringify({ error: "Unauthorized." })), { status: 401 });
 		}
 		if (!isAdmin && locals.user.user_id !== c.user_id) {
-			return json({ error: "Forbidden." }, { status: 403 });
+			return json(await encryptPayload(JSON.stringify({ error: "Forbidden." })), { status: 403 });
 		}
 
 		const rows = await db
@@ -99,18 +100,25 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.where(eq(message.conversation_id, conversationId))
 			.orderBy(asc(message.sent_at));
 
-		return json(rows);
+		return json(await encryptPayload(JSON.stringify(rows)));
 	}
 
-	return json({ error: "Invalid scope." }, { status: 400 });
+	return json(await encryptPayload(JSON.stringify({ error: "Invalid scope." })), { status: 400 });
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-	const body = (await request.json()) as {
-		conversationId?: number;
-		senderId?: number;
-		text?: string;
-	};
+	const encryptedBody = (await request.json().catch(() => null)) as { iv?: string; ciphertext?: string } | null;
+	if (!encryptedBody) {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid request." })), { status: 400 });
+	}
+
+	let body: { conversationId?: number; senderId?: number; text?: string };
+	try {
+		const { decryptPayload } = await import("$lib/payloadEncryption");
+		body = JSON.parse(await decryptPayload(encryptedBody as { iv: string; ciphertext: string }));
+	} catch {
+		return json(await encryptPayload(JSON.stringify({ error: "Invalid encrypted payload." })), { status: 400 });
+	}
 
 	const conversationId = body.conversationId;
 	const senderId = locals.user?.user_id ?? body.senderId;
@@ -118,7 +126,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (!conversationId || !senderId || !text) {
 		return json(
-			{ error: "conversationId, senderId (or logged-in session), and text are required." },
+			await encryptPayload(JSON.stringify({ error: "conversationId, senderId (or logged-in session), and text are required." })),
 			{ status: 400 },
 		);
 	}
@@ -131,11 +139,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const activeConversation = convo[0];
 	if (!activeConversation) {
-		return json({ error: "Conversation not found." }, { status: 404 });
+		return json(await encryptPayload(JSON.stringify({ error: "Conversation not found." })), { status: 404 });
 	}
 
 	if (locals.user?.role === "USER" && locals.user.user_id !== activeConversation.user_id) {
-		return json({ error: "Forbidden." }, { status: 403 });
+		return json(await encryptPayload(JSON.stringify({ error: "Forbidden." })), { status: 403 });
 	}
 
 	if (locals.user?.role === "ADMIN" || locals.user?.role === "SUPERADMIN") {
@@ -156,5 +164,5 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		})
 		.returning();
 
-	return json(createdMessage, { status: 201 });
+	return json(await encryptPayload(JSON.stringify(createdMessage)), { status: 201 });
 };

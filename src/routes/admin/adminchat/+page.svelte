@@ -6,6 +6,7 @@
 		formatBookingRequestSummary,
 		parsePackageBookingRequestPayload,
 	} from "$lib/chat/bookingRequestPayload";
+	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import type { PageProps } from "./$types";
 
 	let { data }: PageProps = $props();
@@ -56,12 +57,22 @@
 		try {
 			const res = await fetch("/api/auth/chat?scope=conversations");
 			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
+				const encryptedErrText = await res.text();
+				let err: any = {};
+				try {
+					const encryptedErr = JSON.parse(encryptedErrText);
+					err = JSON.parse(await decryptPayload(encryptedErr));
+				} catch {
+					err = {};
+				}
 				loadError = typeof err.error === "string" ? err.error : `Could not load inbox (${res.status})`;
 				conversations = [];
 				return;
 			}
-			const d = await res.json();
+			const encryptedDataText = await res.text();
+			const encryptedData = JSON.parse(encryptedDataText);
+			const dataStr = await decryptPayload(encryptedData);
+			const d = JSON.parse(dataStr);
 			conversations = Array.isArray(d) ? d : [];
 		} catch {
 			loadError = "Network error loading conversations.";
@@ -79,7 +90,10 @@
 				messages = [];
 				return;
 			}
-			messages = await res.json();
+			const encryptedDataText = await res.text();
+			const encryptedData = JSON.parse(encryptedDataText);
+			const dataStr = await decryptPayload(encryptedData);
+			messages = JSON.parse(dataStr);
 		} catch {
 			messages = [];
 		}
@@ -88,15 +102,21 @@
 	async function send() {
 		if (!input.trim() || !selected) return;
 
-		await fetch("/api/auth/chat", {
+		const body = {
+			conversationId: selected.conversation_id,
+			senderId: adminId,
+			text: input.trim(),
+		};
+		const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+		const res = await fetch("/api/auth/chat", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				conversationId: selected.conversation_id,
-				senderId: adminId,
-				text: input.trim(),
-			}),
+			body: JSON.stringify(encryptedBody),
 		});
+		if (res.ok) {
+			await loadConversations();
+		}
 
 		input = "";
 		await openChat(selected);
@@ -107,13 +127,22 @@
 		requestActionBusy = { id: messageId, action };
 		bookingErr = "";
 		try {
+			const body = { messageId, action };
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
 			const res = await fetch("/api/admin/booking-request-action", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ messageId, action }),
+				body: JSON.stringify(encryptedBody),
 			});
 			if (!res.ok) {
-				const j = await res.json().catch(() => ({}));
+				const encryptedResponse = await res.text();
+				let j: any = {};
+				try {
+					j = JSON.parse(await decryptPayload(encryptedResponse));
+				} catch {
+					j = {};
+				}
 				bookingErr = typeof j.error === "string" ? j.error : "Could not update request.";
 				return;
 			}
@@ -158,13 +187,21 @@
 				body.serviceTitle = serviceTitle.trim();
 			}
 
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
 			const res = await fetch("/api/admin/chat-booking", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(body),
+				body: JSON.stringify(encryptedBody),
 			});
 			if (!res.ok) {
-				const j = await res.json().catch(() => ({}));
+				const encryptedResponse = await res.text();
+				let j: any = {};
+				try {
+					j = JSON.parse(await decryptPayload(encryptedResponse));
+				} catch {
+					j = {};
+				}
 				bookingErr = typeof j.error === "string" ? j.error : "Could not create booking.";
 				return;
 			}

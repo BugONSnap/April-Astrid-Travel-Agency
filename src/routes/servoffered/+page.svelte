@@ -1,5 +1,6 @@
 <script lang="ts">
 import Header from '$lib/assets/header.svelte'
+import { encryptPayload, decryptPayload } from '$lib/payloadEncryption'
 import { page } from '$app/stores'
 
 type ServiceField =
@@ -73,14 +74,22 @@ data: formData
 
 	try {
 		isSubmitting = true
+		const encryptedBody = await encryptPayload(JSON.stringify(payload))
+
 		const res = await fetch("/api/send-request",{
 			method:"POST",
 			headers:{'Content-Type':'application/json'},
-			body:JSON.stringify(payload)
+			body:JSON.stringify(encryptedBody)
 		})
 
 		if (!res.ok) {
-			const err = await res.json().catch(() => ({}))
+			const encryptedResponse = await res.text()
+			let err: any = {}
+			try {
+				err = JSON.parse(await decryptPayload(encryptedResponse))
+			} catch {
+				err = {}
+			}
 			submitError = typeof err.error === 'string' ? err.error : `Submit failed (${res.status}).`
 			return
 		}
