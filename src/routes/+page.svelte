@@ -158,14 +158,9 @@
 				href="/packages?tour=international"
 				class="inline-flex rounded-lg bg-white px-6 py-3 text-base font-medium text-gray-900 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#c41e3a]"
 			>
-				International Tour
+				BOOK NOW
 			</a>
-			<a
-				href="/packages?tour=philippines"
-				class="inline-flex rounded-lg bg-white px-6 py-3 text-base font-medium text-gray-900 shadow-sm transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#c41e3a]"
-			>
-				Philippines Tour
-			</a>
+			
 		</div>
 	</div>
 </section>
