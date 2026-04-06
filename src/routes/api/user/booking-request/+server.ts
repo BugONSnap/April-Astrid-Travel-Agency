@@ -2,8 +2,9 @@ import { json, type RequestHandler } from "@sveltejs/kit";
 import { and, eq, isNull, or } from "drizzle-orm";
 import {
 	formatBookingRequestSummary,
-	type PackageBookingRequestPayloadV1,
+	type BookingRequestPayloadV1,
 } from "$lib/chat/bookingRequestPayload";
+import { SERVICES_OFFERED_TITLES } from "$lib/data/servicesOffered";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { decryptPayload, encryptPayload, type EncryptedPayload } from "$lib/payloadEncryption";
@@ -35,34 +36,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json(await encryptPayload(JSON.stringify({ error: "Invalid encrypted payload." })), { status: 400 });
 	}
 
-	const packageId = toInt(body.packageId);
+	const kind = typeof body.kind === "string" ? body.kind : "package";
 	const numberOfPeople = toInt(body.numberOfPeople);
 	const note = typeof body.note === "string" ? body.note.trim() : "";
 	const travelRaw = body.travelDate;
 
-	if (!packageId || !numberOfPeople || numberOfPeople < 1) {
-		return json(await encryptPayload(JSON.stringify({ error: "packageId and numberOfPeople are required." })), { status: 400 });
+	if (!numberOfPeople || numberOfPeople < 1) {
+		return json(await encryptPayload(JSON.stringify({ error: "numberOfPeople is required." })), { status: 400 });
 	}
 
-	const pkgRows = await db
-		.select({
-			package_name: schema.packageTable.package_name,
-			price: schema.packageTable.price,
-			duration_days: schema.packageTable.duration_days,
-			country: schema.destination.country_name,
-			city: schema.destination.city_name,
-		})
-		.from(schema.packageTable)
-		.innerJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
-		.where(and(eq(schema.packageTable.package_id, packageId), statusActiveOrNull()))
-		.limit(1);
-
-	const pkg = pkgRows[0];
-	if (!pkg) {
-		return json(await encryptPayload(JSON.stringify({ error: "Package not found or inactive." })), { status: 404 });
-	}
-
-	const destLabel = [pkg.city, pkg.country].filter(Boolean).join(", ") || pkg.country;
+	let payload: BookingRequestPayloadV1;
 	let travelDate: string | null = null;
 	if (typeof travelRaw === "string" && travelRaw.trim()) {
 		const d = new Date(`${travelRaw.trim()}T12:00:00`);
@@ -74,18 +57,61 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 	}
 
-	const payload: PackageBookingRequestPayloadV1 = {
-		v: 1,
-		kind: "package",
-		packageId,
-		packageName: pkg.package_name,
-		listedPrice: Number(pkg.price) || 0,
-		destinationLine: destLabel,
-		durationDays: pkg.duration_days,
-		numberOfPeople,
-		travelDate,
-		note: note || null,
-	};
+	if (kind === "service") {
+		const serviceTitle = typeof body.serviceTitle === "string" ? body.serviceTitle.trim() : "";
+		if (!serviceTitle) {
+			return json(await encryptPayload(JSON.stringify({ error: "serviceTitle is required for service requests." })), { status: 400 });
+		}
+		if (!SERVICES_OFFERED_TITLES.includes(serviceTitle as typeof SERVICES_OFFERED_TITLES[number])) {
+			return json(await encryptPayload(JSON.stringify({ error: "Invalid service title." })), { status: 400 });
+		}
+
+		payload = {
+			v: 1,
+			kind: "service",
+			serviceTitle,
+			numberOfPeople,
+			travelDate,
+			note: note || null,
+		};
+	} else {
+		const packageId = toInt(body.packageId);
+		if (!packageId) {
+			return json(await encryptPayload(JSON.stringify({ error: "packageId is required for package requests." })), { status: 400 });
+		}
+
+		const pkgRows = await db
+			.select({
+				package_name: schema.packageTable.package_name,
+				price: schema.packageTable.price,
+				duration_days: schema.packageTable.duration_days,
+				country: schema.destination.country_name,
+				city: schema.destination.city_name,
+			})
+			.from(schema.packageTable)
+			.innerJoin(schema.destination, eq(schema.packageTable.destination_id, schema.destination.destination_id))
+			.where(and(eq(schema.packageTable.package_id, packageId), statusActiveOrNull()))
+			.limit(1);
+
+		const pkg = pkgRows[0];
+		if (!pkg) {
+			return json(await encryptPayload(JSON.stringify({ error: "Package not found or inactive." })), { status: 404 });
+		}
+
+		const destLabel = [pkg.city, pkg.country].filter(Boolean).join(", ") || pkg.country;
+		payload = {
+			v: 1,
+			kind: "package",
+			packageId,
+			packageName: pkg.package_name,
+			listedPrice: Number(pkg.price) || 0,
+			destinationLine: destLabel,
+			durationDays: pkg.duration_days,
+			numberOfPeople,
+			travelDate,
+			note: note || null,
+		};
+	}
 
 	const existing = await db
 		.select()

@@ -112,7 +112,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json(await encryptPayload(JSON.stringify({ error: "Invalid request." })), { status: 400 });
 	}
 
-	let body: { conversationId?: number; senderId?: number; text?: string };
+	let body: { 
+		conversationId?: number; 
+		senderId?: number; 
+		text?: string;
+		messageKind?: string;
+		fileUrl?: string;
+		fileName?: string;
+		fileType?: string;
+		fileSize?: number;
+		attachmentPurpose?: string;
+	};
 	try {
 		const { decryptPayload } = await import("$lib/payloadEncryption");
 		body = JSON.parse(await decryptPayload(encryptedBody as { iv: string; ciphertext: string }));
@@ -123,10 +133,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const conversationId = body.conversationId;
 	const senderId = locals.user?.user_id ?? body.senderId;
 	const text = body.text?.trim();
+	const messageKind = body.messageKind || "text";
+	const fileUrl = body.fileUrl;
+	const fileName = body.fileName;
+	const fileType = body.fileType;
+	const fileSize = body.fileSize;
+	const attachmentPurpose = body.attachmentPurpose;
 
-	if (!conversationId || !senderId || !text) {
+	if (!conversationId || !senderId) {
 		return json(
-			await encryptPayload(JSON.stringify({ error: "conversationId, senderId (or logged-in session), and text are required." })),
+			await encryptPayload(JSON.stringify({ error: "conversationId and senderId (or logged-in session) are required." })),
+			{ status: 400 },
+		);
+	}
+
+	// For attachment messages, text is optional but messageKind must be valid
+	if (messageKind !== "text" && !["image", "document", "verification"].includes(messageKind)) {
+		return json(
+			await encryptPayload(JSON.stringify({ error: "Invalid message kind. Must be text, image, document, or verification." })),
+			{ status: 400 },
+		);
+	}
+
+	// For attachment messages, require attachment data
+	if (messageKind !== "text" && (!fileUrl || !fileName || !fileType)) {
+		return json(
+			await encryptPayload(JSON.stringify({ error: "Attachment messages require fileUrl, fileName, and fileType." })),
+			{ status: 400 },
+		);
+	}
+
+	// For text messages, require text
+	if (messageKind === "text" && !text) {
+		return json(
+			await encryptPayload(JSON.stringify({ error: "Text messages require text content." })),
 			{ status: 400 },
 		);
 	}
@@ -160,7 +200,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.values({
 			conversation_id: conversationId,
 			sender_id: senderId,
-			message_text: text,
+			message_text: text || "",
+			message_kind: messageKind,
+			file_url: fileUrl,
+			file_name: fileName,
+			file_type: fileType,
+			file_size: fileSize,
+			attachment_purpose: attachmentPurpose,
 		})
 		.returning();
 

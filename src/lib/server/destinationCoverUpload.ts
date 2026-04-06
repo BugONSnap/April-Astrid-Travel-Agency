@@ -1,4 +1,4 @@
-import { deleteCloudinaryImageByUrl, uploadImageToCloudinary } from "$lib/server/cloudinaryUpload";
+import { deleteCloudinaryFileByUrl, uploadImageToCloudinary } from "$lib/server/cloudinaryUpload";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 
@@ -14,6 +14,6 @@ export async function saveDestinationCoverFile(file: File): Promise<string> {
 /** Best-effort deletion for Cloudinary URLs we issued. */
 export async function removeStoredDestinationCover(publicPath: string | null | undefined): Promise<void> {
 	if (!publicPath) return;
-	await deleteCloudinaryImageByUrl(publicPath, "travel-agency");
+	await deleteCloudinaryFileByUrl(publicPath, "travel-agency");
 }
 

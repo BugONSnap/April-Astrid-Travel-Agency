@@ -2,7 +2,7 @@
 	import Header from "$lib/assets/header.svelte";
 	import {
 		formatBookingRequestSummary,
-		parsePackageBookingRequestPayload,
+		parseBookingRequestPayload,
 	} from "$lib/chat/bookingRequestPayload";
 	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import { onMount, tick } from "svelte";
@@ -21,6 +21,11 @@
 		message_kind?: string | null;
 		booking_id?: number | null;
 		request_status?: string | null;
+		file_url?: string | null;
+		file_name?: string | null;
+		file_type?: string | null;
+		file_size?: number | null;
+		attachment_purpose?: string | null;
 	};
 
 	let messages = $state<ChatMessage[]>([]);
@@ -42,7 +47,13 @@
 		canChat = id !== 0;
 	});
 
-	let bookingPackageId = $state("");
+	let selectedFile: File | null = $state(null);
+	let isUploading = $state(false);
+	let uploadProgress = $state(0);
+
+let requestKind = $state<"package" | "service">("package");
+let bookingPackageId = $state("");
+let serviceTitle = $state("");
 	let bookingPax = $state(1);
 	let bookingTravel = $state("");
 	let bookingNote = $state("");
@@ -60,42 +71,56 @@
 	);
 
 	async function submitBookingRequest() {
-		if (!canChat || !bookingPackageId || bookingPax < 1 || bookingSubmitting) return;
-		bookingErr = "";
-		bookingSubmitting = true;
-		try {
-			const body = {
-				packageId: Number.parseInt(bookingPackageId, 10),
-				numberOfPeople: bookingPax,
-				travelDate: bookingTravel.trim() || undefined,
-				note: bookingNote.trim() || undefined,
-			};
-			const encryptedBody = await encryptPayload(JSON.stringify(body));
-
-			const res = await fetch("/api/user/booking-request", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(encryptedBody),
-			});
-			if (!res.ok) {
-				const encryptedResponse = await res.text();
-				let j: any = {};
-				try {
-					j = JSON.parse(await decryptPayload(encryptedResponse));
-				} catch {
-					j = {};
-				}
-				bookingErr = typeof j.error === "string" ? j.error : "Could not send request.";
-				return;
-			}
-			bookingNote = "";
-			await loadChat();
-		} catch {
-			bookingErr = "Network error.";
-		} finally {
-			bookingSubmitting = false;
+	if (!canChat || bookingPax < 1 || bookingSubmitting) return;
+	if (requestKind === "package" && !bookingPackageId) return;
+	if (requestKind === "service" && !serviceTitle.trim()) return;
+	bookingErr = "";
+	bookingSubmitting = true;
+	try {
+		const body: Record<string, unknown> = {
+			kind: requestKind,
+			numberOfPeople: bookingPax,
+			travelDate: bookingTravel.trim() || undefined,
+			note: bookingNote.trim() || undefined,
+		};
+		if (requestKind === "package") {
+			body.packageId = Number.parseInt(bookingPackageId, 10);
+		} else {
+			body.serviceTitle = serviceTitle.trim();
 		}
+
+		const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+		const res = await fetch("/api/user/booking-request", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(encryptedBody),
+		});
+		if (!res.ok) {
+			const encryptedResponse = await res.text();
+			let j: any = {};
+			try {
+				j = JSON.parse(await decryptPayload(encryptedResponse));
+			} catch {
+				j = {};
+			}
+			bookingErr = typeof j.error === "string" ? j.error : "Could not send request.";
+			return;
+		}
+
+		bookingNote = "";
+		if (requestKind === "package") {
+			bookingPackageId = "";
+		} else {
+			serviceTitle = "";
+		}
+		await loadChat();
+	} catch {
+		bookingErr = "Network error.";
+	} finally {
+		bookingSubmitting = false;
 	}
+}
 
 	function scrollToBottom() {
 		if (!bottomEl) return;
@@ -228,6 +253,94 @@
 		}
 	}
 
+	async function uploadFile(file: File, purpose: string): Promise<{
+		file_url: string;
+		file_name: string;
+		file_type: string;
+		file_size: number;
+		attachment_purpose: string;
+	}> {
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("purpose", purpose);
+
+		const response = await fetch("/api/upload/chat-attachment", {
+			method: "POST",
+			body: formData,
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || "Upload failed");
+		}
+
+		return await response.json();
+	}
+
+	async function sendAttachment(purpose: "image" | "document" | "verification") {
+		if (!canChat || !selectedFile || !conversationId || isSending) return;
+
+		const file = selectedFile;
+		selectedFile = null;
+
+		// optimistic append
+		const optimistic: ChatMessage = {
+			message_id: -Date.now(),
+			conversation_id: conversationId,
+			sender_id: userId,
+			message_text: `Uploading ${file.name}...`,
+			sent_at: new Date().toISOString(),
+			message_kind: purpose,
+		};
+		messages = [...messages, optimistic];
+		await tick();
+		scrollToBottom();
+
+		isSending = true;
+		errorMsg = "";
+		try {
+			const uploadResult = await uploadFile(file, purpose);
+
+			const body = {
+				conversationId,
+				senderId: userId,
+				messageKind: purpose,
+				fileUrl: uploadResult.file_url,
+				fileName: uploadResult.file_name,
+				fileType: uploadResult.file_type,
+				fileSize: uploadResult.file_size,
+				attachmentPurpose: uploadResult.attachment_purpose,
+			};
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+			const res = await fetch("/api/auth/chat", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+			if (!res.ok) {
+				const encryptedErrText = await res.text();
+				let err: any = {};
+				try {
+					const encryptedErr = JSON.parse(encryptedErrText);
+					err = JSON.parse(await decryptPayload(encryptedErr));
+				} catch {
+					err = {};
+				}
+				errorMsg = typeof err.error === "string" ? err.error : `Could not send (${res.status})`;
+				// rollback optimistic message
+				messages = messages.filter((m) => m.message_id !== optimistic.message_id);
+				return;
+			}
+			await loadChat();
+		} catch (error) {
+			errorMsg = error instanceof Error ? error.message : "Upload failed";
+			messages = messages.filter((m) => m.message_id !== optimistic.message_id);
+		} finally {
+			isSending = false;
+		}
+	}
+
 	onMount(() => {
 		void loadChat();
 		const pollMs = 12_000;
@@ -260,26 +373,21 @@
 			</p>
 		</div>
 
-		{#if canChat && data.packages.length > 0}
+		{#if canChat}
 			<div class="mb-6 rounded-2xl border border-red-900/10 bg-white p-4 shadow-sm">
-				<p class="text-xs font-semibold tracking-[0.12em] text-zinc-600 uppercase">Request a tour package</p>
+				<p class="text-xs font-semibold tracking-[0.12em] text-zinc-600 uppercase">Request support</p>
 				<p class="mt-1 text-sm text-zinc-600">
-					Sends a request staff can <strong>approve or deny</strong> in admin chat. You’ll see a green confirmation when
-					approved.
+					Create a package or services offered request here. Staff can approve or deny it in admin chat.
 				</p>
 				<div class="mt-4 grid gap-3 sm:grid-cols-2">
 					<label class="block text-xs font-semibold text-zinc-700">
-						Package
+						Request type
 						<select
 							class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
-							bind:value={bookingPackageId}
+							bind:value={requestKind}
 						>
-							<option value="">Select…</option>
-							{#each data.packages as p}
-								<option value={String(p.package_id)}>
-									{p.package_name} — ₱{p.price.toLocaleString("en-PH")}
-								</option>
-							{/each}
+							<option value="package">Package</option>
+							<option value="service">Service</option>
 						</select>
 					</label>
 					<label class="block text-xs font-semibold text-zinc-700">
@@ -308,7 +416,44 @@
 						/>
 					</label>
 				</div>
-				{#if selectedPackage}
+
+				{#if requestKind === "package"}
+					<div class="mt-4 grid gap-3 sm:grid-cols-2">
+						<label class="block text-xs font-semibold text-zinc-700 sm:col-span-2">
+							Package
+							<select
+								class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+								bind:value={bookingPackageId}
+							>
+								<option value="">Select…</option>
+								{#each data.packages as p}
+									<option value={String(p.package_id)}>
+										{p.package_name} — ₱{p.price.toLocaleString("en-PH")}
+									</option>
+								{/each}
+							</select>
+						</label>
+					</div>
+				{/if}
+
+				{#if requestKind === "service"}
+					<div class="mt-4 grid gap-3 sm:grid-cols-2">
+						<label class="block text-xs font-semibold text-zinc-700 sm:col-span-2">
+							Service
+							<select
+								class="mt-1 w-full rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm"
+								bind:value={serviceTitle}
+							>
+								<option value="">Select a service…</option>
+								{#each data.servicesOffered as title}
+									<option value={title}>{title}</option>
+								{/each}
+							</select>
+						</label>
+					</div>
+				{/if}
+
+				{#if requestKind === "package" && selectedPackage}
 					<div
 						class="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950"
 						aria-live="polite"
@@ -337,6 +482,7 @@
 						</ul>
 					</div>
 				{/if}
+
 				{#if bookingErr}
 					<p class="mt-2 text-sm text-red-800" role="alert">{bookingErr}</p>
 				{/if}
@@ -344,7 +490,10 @@
 					type="button"
 					class="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
 					onclick={submitBookingRequest}
-					disabled={bookingSubmitting || !bookingPackageId}
+					disabled={
+						bookingSubmitting ||
+						(requestKind === "package" ? !bookingPackageId : !serviceTitle.trim())
+					}
 				>
 					{bookingSubmitting ? "Sending…" : "Send booking request to chat"}
 				</button>
@@ -413,7 +562,7 @@
 								{#each messages as m (m.message_id)}
 									<div class={m.sender_id === userId ? "flex justify-end" : "flex justify-start"}>
 										{#if m.message_kind === "booking_request"}
-											{@const rp = parsePackageBookingRequestPayload(m.message_text)}
+											{@const rp = parseBookingRequestPayload(m.message_text)}
 											{@const rs = m.request_status ?? "PENDING"}
 											<div
 												class={[
@@ -454,7 +603,72 @@
 															: "border border-red-900/10 bg-white text-zinc-900",
 												].join(" ")}
 											>
-												<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
+												{#if m.message_kind === "image" && m.file_url}
+													<div class="space-y-2">
+														{#if m.file_name}
+															<p class="text-xs opacity-75">{m.file_name}</p>
+														{/if}
+														<img 
+															src={m.file_url} 
+															alt={m.file_name || "Attachment"} 
+															class="max-w-full rounded-lg cursor-pointer hover:opacity-90"
+															onclick={() => window.open(m.file_url!, '_blank')}
+														/>
+														{#if m.attachment_purpose}
+															<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+														{/if}
+													</div>
+												{:else if m.message_kind === "document" && m.file_url}
+													<div class="space-y-2">
+														<div class="flex items-center gap-2">
+															<svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+															</svg>
+															<div>
+																<p class="font-medium text-sm">{m.file_name}</p>
+																{#if m.file_size}
+																	<p class="text-xs opacity-75">{Math.round(m.file_size / 1024)} KB</p>
+																{/if}
+															</div>
+														</div>
+														<button
+															type="button"
+															class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+															onclick={() => window.open(m.file_url!, '_blank')}
+														>
+															View Document
+														</button>
+														{#if m.attachment_purpose}
+															<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+														{/if}
+													</div>
+												{:else if m.message_kind === "verification" && m.file_url}
+													<div class="space-y-2">
+														<div class="flex items-center gap-2">
+															<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+															</svg>
+															<div>
+																<p class="font-medium text-sm">{m.file_name}</p>
+																{#if m.file_size}
+																	<p class="text-xs opacity-75">{Math.round(m.file_size / 1024)} KB</p>
+																{/if}
+															</div>
+														</div>
+														<button
+															type="button"
+															class="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+															onclick={() => window.open(m.file_url!, '_blank')}
+														>
+															View Verification
+														</button>
+														{#if m.attachment_purpose}
+															<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+														{/if}
+													</div>
+												{:else}
+													<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
+												{/if}
 												{#if m.message_kind === "booking_notice"}
 													<a
 														href="/profile"
@@ -473,31 +687,93 @@
 					</div>
 
 					<form
-						class="flex gap-2 border-t border-red-900/10 bg-white p-3 sm:p-4"
+						class="flex flex-col gap-3 border-t border-red-900/10 bg-white p-3 sm:p-4"
 						onsubmit={(e) => {
 							e.preventDefault();
 							send();
 						}}
 					>
-						<input
-							class="min-w-0 flex-1 rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-red-700/50 focus:ring-4 focus:ring-red-700/10"
-							placeholder="Type your message…"
-							bind:value={input}
-							disabled={isBooting || isLoading}
-							onkeydown={(e) => {
-								if (e.key === "Enter" && !e.shiftKey) {
-									e.preventDefault();
-									send();
-								}
-							}}
-						/>
-						<button
-							type="submit"
-							class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-800 disabled:opacity-50"
-							disabled={isBooting || isLoading || isSending || !input.trim()}
-						>
-							{isSending ? "Sending…" : "Send"}
-						</button>
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+							<input
+								class="min-w-0 flex-1 rounded-xl border border-red-900/15 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-red-700/50 focus:ring-4 focus:ring-red-700/10"
+								placeholder="Type your message…"
+								bind:value={input}
+								disabled={isBooting || isLoading}
+								onkeydown={(e) => {
+									if (e.key === "Enter" && !e.shiftKey) {
+										e.preventDefault();
+										send();
+									}
+								}}
+							/>
+							<label
+								class="inline-flex shrink-0 items-center justify-center rounded-xl border border-red-900/15 bg-red-50 px-4 py-2 text-sm font-semibold text-red-900 hover:bg-red-100 cursor-pointer"
+							>
+								<input
+									type="file"
+									accept="image/*,.pdf,.doc,.docx,.txt"
+									class="hidden"
+									onchange={(e) => {
+										const file = (e.target as HTMLInputElement).files?.[0];
+										if (file) selectedFile = file;
+									}}
+								/>
+								Attach
+							</label>
+							<button
+								type="submit"
+								class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-800 disabled:opacity-50"
+								disabled={isBooting || isLoading || isSending || !input.trim()}
+							>
+								{isSending ? "Sending…" : "Send"}
+							</button>
+						</div>
+
+						{#if selectedFile}
+							<div class="rounded-2xl border border-red-900/10 bg-red-50 p-3 text-sm text-zinc-900 shadow-sm">
+								<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+									<div class="flex items-center gap-2 text-sm text-zinc-700">
+										<svg class="w-4 h-4 text-red-900" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm0 2h12v10H4V5z" clip-rule="evenodd"/>
+										</svg>
+										<span class="font-semibold text-zinc-900">{selectedFile.name}</span>
+									</div>
+									<div class="flex flex-wrap gap-2">
+										<button
+											type="button"
+											class="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+											disabled={isSending}
+											onclick={() => sendAttachment("image")}
+										>
+											Send as Image
+										</button>
+										<button
+											type="button"
+											class="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+											disabled={isSending}
+											onclick={() => sendAttachment("document")}
+										>
+											Send as Document
+										</button>
+										<button
+											type="button"
+											class="rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+											disabled={isSending}
+											onclick={() => sendAttachment("verification")}
+										>
+											Send as Verification
+										</button>
+										<button
+											type="button"
+											class="rounded-xl bg-gray-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-600"
+											onclick={() => selectedFile = null}
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							</div>
+						{/if}
 					</form>
 				</div>
 			</div>

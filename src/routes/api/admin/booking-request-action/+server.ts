@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
-import { parsePackageBookingRequestPayload } from "$lib/chat/bookingRequestPayload";
+import { parseBookingRequestPayload } from "$lib/chat/bookingRequestPayload";
 import { createBookingFromChatAndNotify } from "$lib/server/chatBooking";
 import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
@@ -61,7 +61,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.limit(1);
 	if (!conv) return json(await encryptPayload(JSON.stringify({ error: "Conversation not found." })), { status: 404 });
 
-	const payload = parsePackageBookingRequestPayload(row.message_text);
+	const payload = parseBookingRequestPayload(row.message_text);
 	if (!payload) {
 		return json(await encryptPayload(JSON.stringify({ error: "Could not read booking request data." })), { status: 400 });
 	}
@@ -76,32 +76,42 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			conversation_id: row.conversation_id,
 			sender_id: adminUserId,
 			message_text:
-				"Your package booking request was declined. If you have questions or want a different option, reply here and we’ll help.",
+				payload.kind === "service"
+					? "Your service request was declined. If you have questions or want a different option, reply here and we’ll help."
+					: "Your package booking request was declined. If you have questions or want a different option, reply here and we’ll help.",
 			message_kind: "text",
 		});
 
 		return json(await encryptPayload(JSON.stringify({ ok: true, action: "denied" })), { status: 200 });
 	}
 
-	// approve
 	const travelDate = payload.travelDate
 		? new Date(`${payload.travelDate}T12:00:00`)
 		: null;
 	const travelDateNorm = travelDate && !Number.isNaN(travelDate.getTime()) ? travelDate : null;
 
-	const totalPrice = Math.max(0, Math.round(payload.listedPrice * payload.numberOfPeople));
-
-	const result = await createBookingFromChatAndNotify({
-		conversationId: row.conversation_id,
-		customerUserId: conv.user_id,
-		adminUserId,
-		kind: "PACKAGE",
-		packageId: payload.packageId,
-		numberOfPeople: payload.numberOfPeople,
-		travelDate: travelDateNorm,
-		totalPrice,
-		bookingStatus: "CONFIRMED",
-	});
+	let bookingId: number | null = null;
+	if (payload.kind === "package") {
+		const result = await createBookingFromChatAndNotify({
+			conversationId: row.conversation_id,
+			customerUserId: conv.user_id,
+			adminUserId,
+			kind: "PACKAGE",
+			packageId: payload.packageId,
+			numberOfPeople: payload.numberOfPeople,
+			travelDate: travelDateNorm,
+			totalPrice: Math.max(0, Math.round(payload.listedPrice * payload.numberOfPeople)),
+			bookingStatus: "CONFIRMED",
+		});
+		bookingId = result.booking_id;
+	} else {
+		await db.insert(schema.message).values({
+			conversation_id: row.conversation_id,
+			sender_id: adminUserId,
+			message_text: `Your service request for ${payload.serviceTitle} has been approved. Reply here if you want us to record the service booking or confirm the next step in thread.`,
+			message_kind: "text",
+		});
+	}
 
 	if (!conv.admin_id) {
 		await db
@@ -114,7 +124,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.update(schema.message)
 		.set({
 			request_status: "APPROVED",
-			booking_id: result.booking_id,
+			booking_id: bookingId,
 		})
 		.where(eq(schema.message.message_id, messageId));
 
@@ -122,8 +132,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		await encryptPayload(JSON.stringify({
 			ok: true,
 			action: "approved",
-			booking_id: result.booking_id,
-			message_id: result.message_id,
+			booking_id: bookingId,
 		})),
 		{ status: 200 },
 	);

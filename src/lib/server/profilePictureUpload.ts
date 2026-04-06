@@ -1,4 +1,4 @@
-import { deleteCloudinaryImageByUrl, uploadImageToCloudinary } from "$lib/server/cloudinaryUpload";
+import { deleteCloudinaryFileByUrl, uploadImageToCloudinary } from "$lib/server/cloudinaryUpload";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -21,5 +21,5 @@ export async function removeStoredProfilePicture(
 	if (!publicPath) {
 		return;
 	}
-	await deleteCloudinaryImageByUrl(publicPath, "travel-agency");
+	await deleteCloudinaryFileByUrl(publicPath, "travel-agency");
 }

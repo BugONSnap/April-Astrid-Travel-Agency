@@ -4,7 +4,7 @@
 	import { page } from "$app/stores";
 	import {
 		formatBookingRequestSummary,
-		parsePackageBookingRequestPayload,
+		parseBookingRequestPayload,
 	} from "$lib/chat/bookingRequestPayload";
 	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import type { PageProps } from "./$types";
@@ -18,6 +18,11 @@
 		message_kind?: string | null;
 		booking_id?: number | null;
 		request_status?: string | null;
+		file_url?: string | null;
+		file_name?: string | null;
+		file_type?: string | null;
+		file_size?: number | null;
+		attachment_purpose?: string | null;
 	};
 
 	let conversations: Array<{
@@ -43,6 +48,8 @@
 	let requestActionBusy = $state<{ id: number; action: "approve" | "deny" } | null>(null);
 
 	let adminId = $state(0);
+	let selectedFile: File | null = $state(null);
+	let isUploading = $state(false);
 	$effect(() => {
 		adminId = (get(page).data.user?.user_id as number | undefined) ?? 0;
 	});
@@ -120,6 +127,66 @@
 
 		input = "";
 		await openChat(selected);
+	}
+
+	async function uploadFile(file: File, purpose: string): Promise<{
+		file_url: string;
+		file_name: string;
+		file_type: string;
+		file_size: number;
+		attachment_purpose: string;
+	}> {
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("purpose", purpose);
+
+		const response = await fetch("/api/upload/chat-attachment", {
+			method: "POST",
+			body: formData,
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || "Upload failed");
+		}
+
+		return await response.json();
+	}
+
+	async function sendAttachment(purpose: "image" | "document" | "verification") {
+		if (!selectedFile || !selected) return;
+
+		const file = selectedFile;
+		selectedFile = null;
+
+		try {
+			const uploadResult = await uploadFile(file, purpose);
+
+			const body = {
+				conversationId: selected.conversation_id,
+				senderId: adminId,
+				messageKind: purpose,
+				fileUrl: uploadResult.file_url,
+				fileName: uploadResult.file_name,
+				fileType: uploadResult.file_type,
+				fileSize: uploadResult.file_size,
+				attachmentPurpose: uploadResult.attachment_purpose,
+			};
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+			const res = await fetch("/api/auth/chat", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+			if (res.ok) {
+				await loadConversations();
+			}
+
+			await openChat(selected);
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : "Upload failed";
+		}
 	}
 
 	async function actOnBookingRequest(messageId: number, action: "approve" | "deny") {
@@ -356,13 +423,13 @@
 			<div class="ap-chat-messages">
 				{#each messages as m (m.message_id)}
 					{#if m.message_kind === "booking_request"}
-						{@const reqPayload = parsePackageBookingRequestPayload(m.message_text)}
+						{@const reqPayload = parseBookingRequestPayload(m.message_text)}
 						{@const reqStatus = m.request_status ?? "PENDING"}
 						<div
 							class="ap-chat-bubble ap-chat-bubble--request"
 							class:ap-chat-bubble--them={true}
 						>
-							<p class="ap-request-kicker">Package booking request</p>
+							<p class="ap-request-kicker">Booking request</p>
 							{#if reqPayload}
 								<pre class="ap-chat-pre">{formatBookingRequestSummary(reqPayload)}</pre>
 							{:else}
@@ -404,32 +471,155 @@
 							class:ap-chat-bubble--me={adminId !== 0 && m.sender_id === adminId}
 							class:ap-chat-bubble--them={adminId === 0 || m.sender_id !== adminId}
 						>
-							<pre class="ap-chat-pre">{m.message_text}</pre>
+							{#if m.message_kind === "image" && m.file_url}
+								<div class="space-y-2">
+									{#if m.file_name}
+										<p class="text-xs opacity-75">{m.file_name}</p>
+									{/if}
+									<img 
+										src={m.file_url} 
+										alt={m.file_name || "Attachment"} 
+										class="max-w-full rounded-lg cursor-pointer hover:opacity-90 max-h-64"
+										onclick={() => window.open(m.file_url!, '_blank')}
+									/>
+									{#if m.attachment_purpose}
+										<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+									{/if}
+								</div>
+							{:else if m.message_kind === "document" && m.file_url}
+								<div class="space-y-2">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+										</svg>
+										<div>
+											<p class="font-medium text-sm">{m.file_name}</p>
+											{#if m.file_size}
+												<p class="text-xs opacity-75">{Math.round(m.file_size / 1024)} KB</p>
+											{/if}
+										</div>
+									</div>
+									<button
+										type="button"
+										class="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+										onclick={() => window.open(m.file_url!, '_blank')}
+									>
+										View Document
+									</button>
+									{#if m.attachment_purpose}
+										<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+									{/if}
+								</div>
+							{:else if m.message_kind === "verification" && m.file_url}
+								<div class="space-y-2">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+										</svg>
+										<div>
+											<p class="font-medium text-sm">{m.file_name}</p>
+											{#if m.file_size}
+												<p class="text-xs opacity-75">{Math.round(m.file_size / 1024)} KB</p>
+											{/if}
+										</div>
+									</div>
+									<button
+										type="button"
+										class="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+										onclick={() => window.open(m.file_url!, '_blank')}
+									>
+										View Verification
+									</button>
+									{#if m.attachment_purpose}
+										<p class="text-xs opacity-75">Purpose: {m.attachment_purpose}</p>
+									{/if}
+								</div>
+							{:else}
+								<pre class="ap-chat-pre">{m.message_text}</pre>
+							{/if}
 						</div>
 					{/if}
 				{/each}
 			</div>
 			<div class="ap-chat-input-row">
-				<input
-					class="ap-input ap-chat-input"
-					bind:value={input}
-					placeholder={selected ? "Type a reply…" : "Select a thread first"}
-					disabled={!selected}
-					onkeydown={(e) => {
-						if (e.key === "Enter" && !e.shiftKey) {
-							e.preventDefault();
-							send();
-						}
-					}}
-				/>
-				<button
-					type="button"
-					class="ap-btn ap-btn--primary"
-					onclick={send}
-					disabled={!selected || !input.trim()}
-				>
-					Send
-				</button>
+				{#if selectedFile}
+					<div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border w-full">
+						<svg class="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm0 2h12v10H4V5z" clip-rule="evenodd"/>
+						</svg>
+						<span class="text-sm text-gray-700 flex-1">{selectedFile.name}</span>
+						<div class="flex gap-1">
+							<button
+								type="button"
+								class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+								onclick={() => sendAttachment("image")}
+							>
+								Send as Image
+							</button>
+							<button
+								type="button"
+								class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+								onclick={() => sendAttachment("document")}
+							>
+								Send as Document
+							</button>
+							<button
+								type="button"
+								class="text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600"
+								onclick={() => sendAttachment("verification")}
+							>
+								Send as Verification
+							</button>
+							<button
+								type="button"
+								class="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
+								onclick={() => selectedFile = null}
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="flex gap-2 w-full">
+						<input
+							class="ap-input ap-chat-input flex-1"
+							bind:value={input}
+							placeholder={selected ? "Type a reply…" : "Select a thread first"}
+							disabled={!selected}
+							onkeydown={(e) => {
+								if (e.key === "Enter" && !e.shiftKey) {
+									e.preventDefault();
+									send();
+								}
+							}}
+						/>
+						<label class="cursor-pointer">
+							<input
+								type="file"
+								accept="image/*,.pdf,.doc,.docx,.txt"
+								class="hidden"
+								onchange={(e) => {
+									const file = (e.target as HTMLInputElement).files?.[0];
+									if (file) selectedFile = file;
+								}}
+							/>
+							<span class="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200">
+								<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm0 2h12v10H4V5z" clip-rule="evenodd"/>
+								</svg>
+								Attach
+							</span>
+						</label>
+						<button
+							type="button"
+							class="ap-btn ap-btn--primary"
+							onclick={send}
+							disabled={!selected || !input.trim()}
+						>
+							Send
+						</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>

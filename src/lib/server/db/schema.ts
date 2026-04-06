@@ -222,7 +222,14 @@ export const bookmark = pgTable("bookmark", {
 
 /* ================= MESSAGING: messages ================= */
 
-export const MESSAGE_KIND = ["text", "booking_notice", "booking_request"] as const;
+export const MESSAGE_KIND = [
+  "text",
+  "booking_notice",
+  "booking_request",
+  "image",
+  "document",
+  "verification",
+] as const;
 
 // messages (one-to-many inside conversation)
 export const message = pgTable("message", {
@@ -239,6 +246,13 @@ export const message = pgTable("message", {
   message_text: text("message_text").notNull(),
 
   message_kind: text("message_kind").notNull().default("text"),
+
+  /** Optional attachment metadata for image/document/verification messages. */
+  file_url: text("file_url"),
+  file_name: text("file_name"),
+  file_type: text("file_type"),
+  file_size: integer("file_size"),
+  attachment_purpose: text("attachment_purpose"),
 
   /** Populated when message_kind is booking_notice. */
   booking_id: integer("booking_id").references(() => booking.booking_id),

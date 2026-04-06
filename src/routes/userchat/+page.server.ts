@@ -1,6 +1,7 @@
 import type { PageServerLoad } from "./$types";
 import { desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "$lib/server/db";
+import { SERVICES_OFFERED_TITLES } from "$lib/data/servicesOffered";
 import * as schema from "$lib/server/db/schema";
 
 function statusActiveOrNull() {
@@ -43,5 +44,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 			duration_days: r.duration_days,
 			destination_line: [r.city, r.country].filter(Boolean).join(", ") || r.country,
 		})),
+		servicesOffered: [...SERVICES_OFFERED_TITLES],
 	};
 };
