@@ -330,14 +330,8 @@
 	<div class="partners-grid">
 		<div class="partners-logo"><img src="/partner1.png" alt="BOSZTAA" /></div>
 		<div class="partners-logo"><img src="/partner3.png" alt="Department of Tourism Philippines" /></div>
-		<div class="partners-logo"><img src="/partner6.png" alt="Cebu Pacific" /></div>
-		<div class="partners-logo"><img src="/partner7.png" alt="AirAsia" /></div>
-		<div class="partners-logo"><img src="/partner8.png" alt="Singapore Airlines" /></div>
-		<div class="partners-logo"><img src="/partner9.png" alt="Cathay Pacific" /></div>
-		<div class="partners-logo"><img src="/partner11.png" alt="TPB Philippines" /></div>
 		<div class="partners-logo"><img src="/partner10.png" alt="DTI Philippines" /></div>
 		<div class="partners-logo"><img src="/partner15.png" alt="Bataan Sangguniang Panlalawigan" /></div>
-		<div class="partners-logo"><img src="/partner12.png" alt="WITM Worldmaster" /></div>
 	</div>
 </section>
 
