@@ -812,15 +812,15 @@
 		text-align: center;
 	}
 
-	.partners-grid {
-		display: grid;
-		grid-template-columns: repeat(6, 1fr);
-		gap: 1.5rem 2rem;
-		max-width: 1100px;
-		margin: 0 auto;
-		align-items: center;
-		justify-items: center;
-	}
+.partners-grid {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 1.5rem 2rem;
+	max-width: 900px;
+	margin: 0 auto;
+}
 
 	.partners-logo {
 		display: flex;

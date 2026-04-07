@@ -49,17 +49,11 @@
 <!-- Partners section reused from home page -->
 <section class="partners-section" aria-label="Our partners on about page">
 	<h2 class="partners-title">Partners</h2>
-	<div class="partners-grid">
+	<div class="partners-grid self-center">
 		<div class="partners-logo"><img src="/partner1.png" alt="BOSZTAA" /></div>
 		<div class="partners-logo"><img src="/partner3.png" alt="Department of Tourism Philippines" /></div>
-		<div class="partners-logo"><img src="/partner6.png" alt="Cebu Pacific" /></div>
-		<div class="partners-logo"><img src="/partner7.png" alt="AirAsia" /></div>
-		<div class="partners-logo"><img src="/partner8.png" alt="Singapore Airlines" /></div>
-		<div class="partners-logo"><img src="/partner9.png" alt="Cathay Pacific" /></div>
-		<div class="partners-logo"><img src="/partner11.png" alt="TPB Philippines" /></div>
 		<div class="partners-logo"><img src="/partner10.png" alt="DTI Philippines" /></div>
 		<div class="partners-logo"><img src="/partner15.png" alt="Bataan Sangguniang Panlalawigan" /></div>
-		<div class="partners-logo"><img src="/partner12.png" alt="WITM Worldmaster" /></div>
 	</div>
 </section>
 
@@ -82,15 +76,15 @@
 		text-align: center;
 	}
 
-	.partners-grid {
-		display: grid;
-		grid-template-columns: repeat(6, 1fr);
-		gap: 1.5rem 2rem;
-		max-width: 1100px;
-		margin: 0 auto;
-		align-items: center;
-		justify-items: center;
-	}
+.partners-grid {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 1.5rem 2rem;
+	max-width: 900px;
+	margin: 0 auto;
+}
 
 	.partners-logo {
 		display: flex;

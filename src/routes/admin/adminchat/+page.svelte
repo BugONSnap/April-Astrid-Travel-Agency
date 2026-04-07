@@ -50,6 +50,7 @@
 	let adminId = $state(0);
 	let selectedFile: File | null = $state(null);
 	let isUploading = $state(false);
+	let sendingQRs = $state(false);
 	$effect(() => {
 		adminId = (get(page).data.user?.user_id as number | undefined) ?? 0;
 	});
@@ -186,6 +187,53 @@
 			await openChat(selected);
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : "Upload failed";
+		}
+	}
+
+	async function sendQRPaymentCodes() {
+		if (!selected) return;
+		sendingQRs = true;
+		bookingErr = "";
+		
+		try {
+			// Fetch the 2 QR code images from static folder
+			const qrUrls = [
+				"/BPIQR.jpg", // Update with your actual QR code paths
+				"/GCASHQR.jpg"  // Update with your actual QR code paths
+			];
+			
+			// Send both QR codes as image messages simultaneously
+			const sendPromises = qrUrls.map(async (fileUrl, index) => {
+				const fileName = `Payment-QR-${index + 1}.png`;
+				const body = {
+					conversationId: selected.conversation_id,
+					senderId: adminId,
+					messageKind: "image",
+					fileUrl: fileUrl,
+					fileName: fileName,
+					fileType: "image/png",
+					fileSize: 0,
+					attachmentPurpose: "payment_qr",
+				};
+				const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+				const res = await fetch("/api/auth/chat", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(encryptedBody),
+				});
+				if (!res.ok) {
+					throw new Error(`Failed to send QR code ${index + 1}`);
+				}
+			});
+
+			await Promise.all(sendPromises);
+			await loadConversations();
+			await openChat(selected);
+		} catch (error) {
+			bookingErr = error instanceof Error ? error.message : "Failed to send QR codes";
+		} finally {
+			sendingQRs = false;
 		}
 	}
 
@@ -409,14 +457,25 @@
 					{#if bookingErr}
 						<p class="admin-booking-err" role="alert">{bookingErr}</p>
 					{/if}
-					<button
-						type="button"
-						class="ap-btn ap-btn--primary"
-						onclick={sendBookingConfirmation}
-						disabled={bookingBusy}
-					>
-						{bookingBusy ? "Saving…" : "Create booking & send notice"}
-					</button>
+					<div class="admin-booking-actions">
+						<button
+							type="button"
+							class="ap-btn ap-btn--primary"
+							onclick={sendBookingConfirmation}
+							disabled={bookingBusy}
+						>
+							{bookingBusy ? "Saving…" : "Create booking & send notice"}
+						</button>
+						<button
+							type="button"
+							class="ap-btn ap-btn--secondary"
+							onclick={sendQRPaymentCodes}
+							disabled={sendingQRs}
+							title="Send both payment QR codes at once"
+						>
+							{sendingQRs ? "Sending QRs…" : "📱 Send 2 Payment QR Codes"}
+						</button>
+					</div>
 				</div>
 			{/if}
 
@@ -669,6 +728,23 @@
 		font-size: 0.8125rem;
 		color: #b91c1c;
 	}
+	.admin-booking-actions {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.admin-booking-actions .ap-btn {
+		flex: 1;
+		min-width: 150px;
+	}
+	@media (max-width: 640px) {
+		.admin-booking-actions {
+			flex-direction: column;
+		}
+		.admin-booking-actions .ap-btn {
+			min-width: 0;
+		}
+	}
 	.ap-chat-bubble--booking {
 		border: 1px solid rgba(22, 163, 74, 0.35);
 		background: linear-gradient(135deg, rgba(22, 163, 74, 0.12), rgba(255, 255, 255, 0.95)) !important;
@@ -710,5 +786,23 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		margin-top: 0.65rem;
+	}
+	
+	.ap-chat-main {
+		display: flex;
+		flex-direction: column;
+	
+	}
+	
+	.ap-chat-messages {
+		flex: 1;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 1rem;
+		height: auto;
+		
+
 	}
 </style>
