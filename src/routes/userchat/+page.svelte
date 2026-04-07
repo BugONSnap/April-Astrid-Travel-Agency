@@ -611,7 +611,7 @@ let serviceTitle = $state("");
 														<img 
 															src={m.file_url} 
 															alt={m.file_name || "Attachment"} 
-															class="max-w-full rounded-lg cursor-pointer hover:opacity-90"
+															class="max-w-full max-h-64 rounded-lg cursor-pointer hover:opacity-90 object-contain"
 															onclick={() => window.open(m.file_url!, '_blank')}
 														/>
 														{#if m.attachment_purpose}
