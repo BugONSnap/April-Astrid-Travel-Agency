@@ -26,6 +26,7 @@
 		file_type?: string | null;
 		file_size?: number | null;
 		attachment_purpose?: string | null;
+		is_seen?: boolean;
 	};
 
 	let messages = $state<ChatMessage[]>([]);
@@ -50,6 +51,9 @@
 	let selectedFile: File | null = $state(null);
 	let isUploading = $state(false);
 	let uploadProgress = $state(0);
+	let isTyping = $state(false);
+	let isOnline = $state(false);
+	let typingTimeout: NodeJS.Timeout | null = null;
 
 let requestKind = $state<"package" | "service">("package");
 let bookingPackageId = $state("");
@@ -127,6 +131,51 @@ let serviceTitle = $state("");
 		bottomEl.scrollIntoView({ block: "end", behavior: "smooth" });
 	}
 
+	async function markMessagesAsRead() {
+		if (!conversationId) return;
+		try {
+			const unreadMessageIds = messages
+				.filter((m) => m.sender_id !== userId && !m.is_seen)
+				.map((m) => m.message_id);
+
+			if (unreadMessageIds.length === 0) return;
+
+			const body = { messageIds: unreadMessageIds };
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+			const res = await fetch("/api/auth/chat-mark-read", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+
+			if (res.ok) {
+				for (const id of unreadMessageIds) {
+					const msg = messages.find((m) => m.message_id === id);
+					if (msg) msg.is_seen = true;
+				}
+				messages = messages;
+			}
+		} catch {
+			// Silently fail
+		}
+	}
+
+	async function notifyTyping() {
+		if (!conversationId) return;
+		try {
+			const body = { conversationId, isTyping: true };
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+			await fetch("/api/auth/chat-typing", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+		} catch {
+			// Silently fail
+		}
+	}
+
 	type LoadChatOpts = { silent?: boolean };
 
 	async function loadChat(opts?: LoadChatOpts) {
@@ -185,9 +234,14 @@ let serviceTitle = $state("");
 			const data = JSON.parse(dataStr);
 			const next = Array.isArray(data) ? data : [];
 			messages = next;
+			isOnline = true;
+			isTyping = false;
 			await tick();
 			const newLastId = next.at(-1)?.message_id;
 			if (!silent || newLastId !== prevLastId) scrollToBottom();
+			if (newLastId !== prevLastId) {
+				await markMessagesAsRead();
+			}
 		} catch {
 			if (!silent) errorMsg = "Network error loading chat.";
 		} finally {
@@ -250,6 +304,7 @@ let serviceTitle = $state("");
 			input = text;
 		} finally {
 			isSending = false;
+			if (typingTimeout) clearTimeout(typingTimeout);
 		}
 	}
 
@@ -343,14 +398,38 @@ let serviceTitle = $state("");
 
 	onMount(() => {
 		void loadChat();
-		const pollMs = 12_000;
+		const pollMs = 10_000;
 		const id = setInterval(() => {
 			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
 			const uid = (get(page).data.user?.user_id as number | undefined) ?? 0;
 			if (uid === 0) return;
 			void loadChat({ silent: true });
 		}, pollMs);
-		return () => clearInterval(id);
+		
+		// Presence polling
+		const presenceMs = 3_000;
+		const presenceId = setInterval(async () => {
+			if (!conversationId) return;
+			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+			try {
+				const res = await fetch(`/api/auth/chat-presence?conversationId=${conversationId}`);
+				if (res.ok) {
+					const encryptedDataText = await res.text();
+					const encryptedData = JSON.parse(encryptedDataText);
+					const dataStr = await decryptPayload(encryptedData);
+					const data = JSON.parse(dataStr);
+					isTyping = data.isTyping ?? false;
+					isOnline = data.isOnline ?? false;
+				}
+			} catch {
+				// Silently fail
+			}
+		}, presenceMs);
+
+		return () => {
+			clearInterval(id);
+			clearInterval(presenceId);
+		};
 	});
 </script>
 
@@ -526,9 +605,14 @@ let serviceTitle = $state("");
 					class="flex items-center justify-between gap-3 bg-linear-to-r from-red-700 via-red-800 to-red-950 px-5 py-4 text-white"
 				>
 					<div class="min-w-0">
-						<p class="text-sm font-semibold leading-5">Live support</p>
+						<div class="flex items-center gap-2">
+							<p class="text-sm font-semibold leading-5">Live support</p>
+							{#if isOnline}
+								<span class="w-2 h-2 bg-green-400 rounded-full" title="Admin is online"></span>
+							{/if}
+						</div>
 						<p class="text-xs text-red-100/90">
-							{isBooting ? "Connecting…" : isLoading ? "Refreshing…" : "You’re connected"}
+							{isBooting ? "Connecting…" : isLoading ? "Refreshing…" : isTyping ? "Admin is typing…" : "You’re connected"}
 						</p>
 					</div>
 					<button
@@ -591,6 +675,14 @@ let serviceTitle = $state("");
 														{rs}
 													{/if}
 												</p>
+												<div class="flex items-center justify-end gap-1 mt-1">
+													<p class="text-xs text-amber-700">{new Date(m.sent_at).toLocaleString()}</p>
+													{#if m.sender_id === userId && m.is_seen}
+														<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+															<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+														</svg>
+													{/if}
+												</div>
 											</div>
 										{:else}
 											<div
@@ -669,6 +761,14 @@ let serviceTitle = $state("");
 												{:else}
 													<p class="whitespace-pre-wrap wrap-break-word">{m.message_text}</p>
 												{/if}
+												<div class="flex items-center justify-end gap-1 mt-1">
+													<p class="text-xs text-zinc-500">{new Date(m.sent_at).toLocaleString()}</p>
+													{#if m.sender_id === userId && m.is_seen}
+														<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+															<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+														</svg>
+													{/if}
+												</div>
 												{#if m.message_kind === "booking_notice"}
 													<a
 														href="/profile"
@@ -700,6 +800,11 @@ let serviceTitle = $state("");
 								bind:value={input}
 								disabled={isBooting || isLoading}
 								onkeydown={(e) => {
+									if (typingTimeout) clearTimeout(typingTimeout);
+									typingTimeout = setTimeout(() => {
+										typingTimeout = null;
+									}, 1000);
+									void notifyTyping();
 									if (e.key === "Enter" && !e.shiftKey) {
 										e.preventDefault();
 										send();

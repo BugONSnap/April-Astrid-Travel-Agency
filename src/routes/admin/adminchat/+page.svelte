@@ -17,6 +17,7 @@
 		message_id: number;
 		sender_id: number;
 		message_text: string;
+		sent_at: string;
 		message_kind?: string | null;
 		booking_id?: number | null;
 		request_status?: string | null;
@@ -25,6 +26,7 @@
 		file_type?: string | null;
 		file_size?: number | null;
 		attachment_purpose?: string | null;
+		is_seen?: boolean;
 	};
 
 	let conversations: Array<{
@@ -32,6 +34,7 @@
 		user_id: number;
 		first_name: string | null;
 		last_name: string | null;
+		unread_count?: number;
 	}> = $state([]);
 	let selected: (typeof conversations)[0] | null = $state(null);
 	let messages: ChatRow[] = $state([]);
@@ -53,9 +56,50 @@
 	let selectedFile: File | null = $state(null);
 	let isUploading = $state(false);
 	let sendingQRs = $state(false);
+	let isTyping = $state(false);
+	let isOnline = $state(false);
+	let bottomChatEl: HTMLDivElement | null = $state(null);
+	let lastSendTime = $state(0);
 	$effect(() => {
 		adminId = (get(page).data.user?.user_id as number | undefined) ?? 0;
 	});
+
+	function scrollToBottom() {
+		if (!bottomChatEl) return;
+		setTimeout(() => {
+			bottomChatEl?.scrollIntoView({ behavior: "smooth", block: "end" });
+		}, 0);
+	}
+
+	async function markMessagesAsRead() {
+		if (!selected) return;
+		try {
+			const unreadMessageIds = messages
+				.filter((m) => m.sender_id !== adminId && !m.is_seen)
+				.map((m) => m.message_id);
+
+			if (unreadMessageIds.length === 0) return;
+
+			const body = { messageIds: unreadMessageIds };
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+
+			const res = await fetch("/api/auth/chat-mark-read", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+
+			if (res.ok) {
+				for (const id of unreadMessageIds) {
+					const msg = messages.find((m) => m.message_id === id);
+					if (msg) msg.is_seen = true;
+				}
+				messages = messages;
+			}
+		} catch {
+			// Silently fail on mark as read
+		}
+	}
 
 	function displayName(c: (typeof conversations)[0]) {
 		const n = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
@@ -104,6 +148,11 @@
 			const encryptedData = JSON.parse(encryptedDataText);
 			const dataStr = await decryptPayload(encryptedData);
 			messages = JSON.parse(dataStr);
+			isTyping = false;
+			isOnline = true;
+			await tick();
+			scrollToBottom();
+			await markMessagesAsRead();
 		} catch {
 			messages = [];
 		}
@@ -334,6 +383,23 @@
 		}
 	}
 
+	let typingTimeout: NodeJS.Timeout | null = null;
+
+	async function notifyTyping() {
+		if (!selected) return;
+		try {
+			const body = { conversationId: selected.conversation_id, isTyping: true };
+			const encryptedBody = await encryptPayload(JSON.stringify(body));
+			await fetch("/api/auth/chat-typing", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(encryptedBody),
+			});
+		} catch {
+			// Silently fail
+		}
+	}
+
 	onMount(() => {
 		void loadConversations();
 		const inboxMs = 15_000;
@@ -348,11 +414,36 @@
 	$effect(() => {
 		const conv = selected;
 		if (!conv) return;
-		const threadMs = 10_000;
+		const threadMs = 8_000;
 		const id = setInterval(() => {
 			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
 			void openChat(conv);
 		}, threadMs);
+		return () => clearInterval(id);
+	});
+
+	/** Track typing status and online presence **/
+	$effect(() => {
+		const conv = selected;
+		if (!conv) return;
+		const presenceMs = 3_000;
+		const id = setInterval(async () => {
+			if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+			try {
+				const res = await fetch(`/api/auth/chat-presence?conversationId=${conv.conversation_id}`);
+				if (res.ok) {
+					const encryptedDataText = await res.text();
+					const encryptedData = JSON.parse(encryptedDataText);
+					const { decryptPayload } = await import("$lib/payloadEncryption");
+					const dataStr = await decryptPayload(encryptedData);
+					const data = JSON.parse(dataStr);
+					isTyping = data.isTyping ?? false;
+					isOnline = data.isOnline ?? false;
+				}
+			} catch {
+				// Silently fail
+			}
+		}, presenceMs);
 		return () => clearInterval(id);
 	});
 </script>
@@ -391,15 +482,30 @@
 					class:ap-chat-thread-btn--active={selected?.conversation_id === c.conversation_id}
 					onclick={() => openChat(c)}
 				>
-					{displayName(c)}
-					<span class="ap-muted" style="display: block; margin-top: 0.25rem;">User #{c.user_id}</span>
+					<div class="flex justify-between items-center w-full">
+						<div>
+							{displayName(c)}
+							<span class="ap-muted" style="display: block; margin-top: 0.25rem;">User #{c.user_id}</span>
+						</div>
+						{#if c.unread_count && c.unread_count > 0}
+							<span class="ap-unread-badge">{c.unread_count}</span>
+						{/if}
+					</div>
 				</button>
 			{/each}
 		</div>
 
 		<div class="ap-chat-main">
 			<div class="ap-chat-banner">
-				{selected ? `Thread · ${displayName(selected)}` : "Select a conversation"}
+				<div class="flex items-center gap-2">
+					<span>{selected ? `Thread · ${displayName(selected)}` : "Select a conversation"}</span>
+					{#if selected && isOnline}
+						<span class="ap-online-indicator" title="User is online"></span>
+					{/if}
+				</div>
+				{#if selected && isTyping}
+					<span class="ap-typing-indicator">User is typing...</span>
+				{/if}
 			</div>
 
 			{#if selected}
@@ -481,7 +587,7 @@
 				</div>
 			{/if}
 
-			<div class="ap-chat-messages ap-scrollbar">
+			<div class="ap-chat-messages ap-scrollbar" bind:this={bottomChatEl}>
 				{#each messages as m (m.message_id)}
 					{#if m.message_kind === "booking_request"}
 						{@const reqPayload = parseBookingRequestPayload(m.message_text)}
@@ -524,6 +630,14 @@
 									</button>
 								</div>
 							{/if}
+							<div class="flex items-center justify-end gap-1">
+								<p class="ap-chat-timestamp">{new Date(m.sent_at).toLocaleString()}</p>
+								{#if adminId !== 0 && m.sender_id === adminId && m.is_seen}
+									<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+										<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+									</svg>
+								{/if}
+							</div>
 						</div>
 					{:else}
 						<div
@@ -598,6 +712,14 @@
 							{:else}
 								<pre class="ap-chat-pre">{m.message_text}</pre>
 							{/if}
+							<div class="flex items-center justify-end gap-1">
+								<p class="ap-chat-timestamp">{new Date(m.sent_at).toLocaleString()}</p>
+								{#if adminId !== 0 && m.sender_id === adminId && m.is_seen}
+									<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+										<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+									</svg>
+								{/if}
+							</div>
 						</div>
 					{/if}
 				{/each}
@@ -648,6 +770,11 @@
 							placeholder={selected ? "Type a reply…" : "Select a thread first"}
 							disabled={!selected}
 							onkeydown={(e) => {
+								if (typingTimeout) clearTimeout(typingTimeout);
+								typingTimeout = setTimeout(() => {
+									typingTimeout = null;
+								}, 1000);
+								void notifyTyping();
 								if (e.key === "Enter" && !e.shiftKey) {
 									e.preventDefault();
 									send();
@@ -759,6 +886,39 @@
 			font-family: inherit;
 			font-size: 0.875rem;
 			line-height: 1.45;
+		}
+
+		.ap-chat-timestamp {
+			margin: 0.25rem 0 0;
+			font-size: 0.6875rem;
+			color: var(--ap-muted, #6b7280);
+			text-align: right;
+		}
+
+		.ap-unread-badge {
+			background: #dc2626;
+			color: white;
+			font-size: 0.75rem;
+			font-weight: 600;
+			padding: 0.125rem 0.375rem;
+			border-radius: 0.5rem;
+			min-width: 1.25rem;
+			text-align: center;
+		}
+
+		.ap-typing-indicator {
+			font-size: 0.75rem;
+			color: var(--ap-muted, #6b7280);
+			font-style: italic;
+			margin-left: 0.5rem;
+		}
+
+		.ap-online-indicator {
+			width: 0.5rem;
+			height: 0.5rem;
+			background: #10b981;
+			border-radius: 50%;
+			display: inline-block;
 		}
 
 		.ap-chat-bubble--request {

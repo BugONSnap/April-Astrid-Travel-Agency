@@ -33,9 +33,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				created_at: conversation.created_at,
 				first_name: user.first_name,
 				last_name: user.last_name,
+				unread_count: db.$count(message, and(eq(message.conversation_id, conversation.conversation_id), eq(message.sender_id, conversation.user_id), eq(message.is_read, 0))),
 			})
 			.from(conversation)
 			.leftJoin(user, eq(user.user_id, conversation.user_id))
+			.leftJoin(message, eq(message.conversation_id, conversation.conversation_id))
+			.groupBy(conversation.conversation_id, user.first_name, user.last_name)
 			.orderBy(desc(conversation.created_at));
 
 		return json(await encryptPayload(JSON.stringify(rows)));
@@ -95,7 +98,22 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		}
 
 		const rows = await db
-			.select()
+			.select({
+				message_id: message.message_id,
+				conversation_id: message.conversation_id,
+				sender_id: message.sender_id,
+				message_text: message.message_text,
+				sent_at: message.sent_at,
+				message_kind: message.message_kind,
+				booking_id: message.booking_id,
+				request_status: message.request_status,
+				file_url: message.file_url,
+				file_name: message.file_name,
+				file_type: message.file_type,
+				file_size: message.file_size,
+				attachment_purpose: message.attachment_purpose,
+				is_seen: message.is_read,
+			})
 			.from(message)
 			.where(eq(message.conversation_id, conversationId))
 			.orderBy(asc(message.sent_at));
