@@ -8,7 +8,9 @@
 	} from "$lib/chat/bookingRequestPayload";
 	import { encryptPayload, decryptPayload } from "$lib/payloadEncryption";
 	import type { PageProps } from "./$types";
+	import { tick } from "svelte";
 
+	
 	let { data }: PageProps = $props();
 
 	type ChatRow = {
@@ -479,7 +481,7 @@
 				</div>
 			{/if}
 
-			<div class="ap-chat-messages">
+			<div class="ap-chat-messages ap-scrollbar">
 				{#each messages as m (m.message_id)}
 					{#if m.message_kind === "booking_request"}
 						{@const reqPayload = parseBookingRequestPayload(m.message_text)}
@@ -685,124 +687,126 @@
 </div>
 
 <style>
-	.admin-booking-panel {
-		padding: 1rem 1.15rem;
-		border-bottom: 1px solid var(--ap-border, rgba(127, 29, 29, 0.12));
-		background: linear-gradient(180deg, rgba(196, 30, 58, 0.06), transparent);
-	}
-	.admin-booking-title {
-		margin: 0 0 0.75rem;
-		font-size: 0.8125rem;
-		font-weight: 700;
-		color: var(--ap-ink, #111827);
-	}
-	.admin-booking-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.65rem;
-		margin-bottom: 0.75rem;
-	}
-	@media (max-width: 640px) {
+		.admin-booking-panel {
+			padding: 1rem 1.15rem;
+			border-bottom: 1px solid var(--ap-border, rgba(127, 29, 29, 0.12));
+			background: linear-gradient(180deg, rgba(196, 30, 58, 0.06), transparent);
+		}
+		.admin-booking-title {
+			margin: 0 0 0.75rem;
+			font-size: 0.8125rem;
+			font-weight: 700;
+			color: var(--ap-ink, #111827);
+		}
 		.admin-booking-grid {
-			grid-template-columns: 1fr;
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 0.65rem;
+			margin-bottom: 0.75rem;
 		}
-	}
-	.admin-booking-field {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--ap-muted, #52525b);
-	}
-	.admin-booking-field.ap-span-2 {
-		grid-column: span 2;
-	}
-	@media (max-width: 640px) {
-		.admin-booking-field.ap-span-2 {
-			grid-column: span 1;
+		@media (max-width: 640px) {
+			.admin-booking-grid {
+				grid-template-columns: 1fr;
+			}
 		}
-	}
-	.admin-booking-err {
-		margin: 0 0 0.5rem;
-		font-size: 0.8125rem;
-		color: #b91c1c;
-	}
-	.admin-booking-actions {
-		display: flex;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-	.admin-booking-actions .ap-btn {
-		flex: 1;
-		min-width: 150px;
-	}
-	@media (max-width: 640px) {
-		.admin-booking-actions {
+		.admin-booking-field {
+			display: flex;
 			flex-direction: column;
+			gap: 0.25rem;
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--ap-muted, #52525b);
+		}
+		.admin-booking-field.ap-span-2 {
+			grid-column: span 2;
+		}
+		@media (max-width: 640px) {
+			.admin-booking-field.ap-span-2 {
+				grid-column: span 1;
+			}
+		}
+		.admin-booking-err {
+			margin: 0 0 0.5rem;
+			font-size: 0.8125rem;
+			color: #b91c1c;
+		}
+		.admin-booking-actions {
+			display: flex;
+			gap: 0.75rem;
+			flex-wrap: wrap;
 		}
 		.admin-booking-actions .ap-btn {
-			min-width: 0;
+			flex: 1;
+			min-width: 150px;
 		}
-	}
-	.ap-chat-bubble--booking {
-		border: 1px solid rgba(22, 163, 74, 0.35);
-		background: linear-gradient(135deg, rgba(22, 163, 74, 0.12), rgba(255, 255, 255, 0.95)) !important;
-		color: #14532d !important;
-		max-width: 95% !important;
-	}
-	.ap-chat-pre {
-		margin: 0;
-		white-space: pre-wrap;
-		font-family: inherit;
-		font-size: 0.875rem;
-		line-height: 1.45;
-	}
+		@media (max-width: 640px) {
+			.admin-booking-actions {
+				flex-direction: column;
+			}
+			.admin-booking-actions .ap-btn {
+				min-width: 0;
+			}
+		}
+		.ap-chat-bubble--booking {
+			border: 1px solid rgba(22, 163, 74, 0.35);
+			background: linear-gradient(135deg, rgba(22, 163, 74, 0.12), rgba(255, 255, 255, 0.95)) !important;
+			color: #14532d !important;
+			max-width: 95% !important;
+		}
+		.ap-chat-pre {
+			margin: 0;
+			white-space: pre-wrap;
+			font-family: inherit;
+			font-size: 0.875rem;
+			line-height: 1.45;
+		}
 
-	.ap-chat-bubble--request {
-		max-width: 95% !important;
-		border: 1px solid rgba(217, 119, 6, 0.45);
-		background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(255, 255, 255, 0.96)) !important;
-		color: #78350f !important;
-		align-self: flex-start;
-	}
+		.ap-chat-bubble--request {
+			max-width: 95% !important;
+			border: 1px solid rgba(217, 119, 6, 0.45);
+			background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(255, 255, 255, 0.96)) !important;
+			color: #78350f !important;
+			align-self: flex-start;
+		}
 
-	.ap-request-kicker {
-		margin: 0 0 0.35rem;
-		font-size: 0.6875rem;
-		font-weight: 800;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: #92400e;
-	}
+		.ap-request-kicker {
+			margin: 0 0 0.35rem;
+			font-size: 0.6875rem;
+			font-weight: 800;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: #92400e;
+		}
 
-	.ap-request-status {
-		margin: 0.5rem 0 0;
-		font-size: 0.8125rem;
-	}
+		.ap-request-status {
+			margin: 0.5rem 0 0;
+			font-size: 0.8125rem;
+		}
 
-	.ap-request-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 0.65rem;
-	}
-	
-	.ap-chat-main {
-		display: flex;
-		flex-direction: column;
-	
-	}
-	
-	.ap-chat-messages {
-		flex: 1;
-		overflow-y: auto;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		padding: 1rem;
-		height: auto;
+		.ap-request-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			margin-top: 0.65rem;
+		}
 		
+		.ap-chat-main {
+			display: flex;
+			flex-direction: column;
+			
+		
+		}
+		
+		.ap-chat-messages {
+			flex: 1;
+			overflow-y: auto;
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			padding: 1rem;
+			background: var(--ap-bg, #f9fafb);
+			
+		max-height: 70vh;
 
-	}
+		}
 </style>

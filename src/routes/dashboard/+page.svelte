@@ -4,6 +4,7 @@
 	import type { PageProps } from "./$types";
 	import Header from "$lib/assets/header.svelte";
 	import Footer from "$lib/assets/footer.svelte";
+	import DestinationPackagesModal from "$lib/components/DestinationPackagesModal.svelte";
 	import {
 		CONTINENT_DISPLAY_LABEL,
 		CONTINENT_GRID_ROWS,
@@ -101,6 +102,7 @@
 	let selectedDestinationId = $state<number | null>(null);
 	let showModal = $state(false);
 	let showTripTypeModal = $state(false);
+	let showDestinationPackagesModal = $state(false);
 	let selectedTripType = $state("");
 
 	const tripTypes = [
@@ -154,13 +156,22 @@
 		await goto("/packages");
 	}
 
-	async function continueWithTripType() {
-		if (!selectedTripType) return;
-		closeModal();
-		await goto(`/packages?tripType=${encodeURIComponent(selectedTripType)}`);
-	}
+async function continueWithTripType() {
+	if (!selectedTripType) return;
+	closeModal();
+	await goto(`/packages?tripType=${encodeURIComponent(selectedTripType)}`);
+}
 
-	function startDrag(e: PointerEvent) {
+function openDestinationPackages(destinationId: number) {
+	selectedDestinationId = destinationId;
+	showDestinationPackagesModal = true;
+}
+
+function closeDestinationPackagesModal() {
+	showDestinationPackagesModal = false;
+}
+
+function startDrag(e: PointerEvent) {
 		if (!promoContainer) return;
 		isDown = true;
 		startX = e.pageX - promoContainer.offsetLeft;
@@ -208,7 +219,7 @@
 
 <Header />
 
-<section class="relative h-[420px] w-full overflow-hidden">
+<section class="relative h-105 w-full overflow-hidden">
 	{#if slides.length === 0}
 		<div class="absolute inset-0 flex items-center justify-center bg-gray-100 text-gray-600">More coming soon</div>
 	{:else}
@@ -233,22 +244,13 @@
 
 {#if showModal}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
-		<div class="relative w-[380px] max-w-full rounded-2xl bg-white p-6 shadow-2xl animate-scale">
+		<div class="relative w-95 max-w-full rounded-2xl bg-white p-6 shadow-2xl animate-scale">
 			<button class="absolute top-3 right-4 text-xl text-gray-500 hover:text-black" onclick={closeModal}>×</button>
 			<h2 class="mb-2 text-center text-xl font-bold text-black">Plan Your Dream Trip ✈️</h2>
 			<p class="mb-6 text-center text-sm text-black">Choose how you want to start your journey</p>
 
 			<div class="flex flex-col gap-3">
-				<button
-					class="group flex items-center justify-between rounded-xl bg-gray-100 p-4 text-black shadow transition hover:bg-red-600 hover:text-white"
-					onclick={() => {
-						showModal = false;
-						showTripTypeModal = true;
-					}}
-				>
-					<span class="font-medium">Find a Trip For Me</span>
-					<span class="transition group-hover:translate-x-1">→</span>
-				</button>
+				
 
 				<button
 					class="group flex items-center justify-between rounded-xl bg-gray-100 p-4 text-black shadow transition hover:bg-red-600 hover:text-white"
@@ -316,7 +318,7 @@
 			onpointermove={drag}
 		>
 			{#each promos as promo}
-				<div class="min-w-[260px] rounded-xl bg-white shadow transition duration-300 hover:shadow-xl">
+					<div class="min-w-65 rounded-xl bg-white shadow transition duration-300 hover:shadow-xl">
 					<div class="relative">
 						<img src={promo.image} alt={promo.title} class="h-40 w-full object-cover" />
 						<span class="absolute top-2 left-2 rounded bg-red-600 px-2 py-1 text-xs text-white">{promo.badge}</span>
@@ -351,7 +353,7 @@
 							{@const count = groupedDestinations.buckets[continent].length}
 							<button
 								type="button"
-								class="flex min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-gray-200 bg-white px-4 py-6 shadow-sm transition hover:border-red-600/40 hover:bg-red-50/50 hover:shadow-md"
+								class="flex min-h-25 flex-col items-center justify-center rounded-xl border-2 border-gray-200 bg-white px-4 py-6 shadow-sm transition hover:border-red-600/40 hover:bg-red-50/50 hover:shadow-md"
 								onclick={() => (selectedContinentView = continent)}
 							>
 								<span class="text-center font-bold tracking-[0.12em] text-gray-900 sm:text-lg">
@@ -402,7 +404,7 @@
 								"hover:scale-[1.02]",
 								selectedDestinationId === d.destination_id ? "ring-4 ring-red-500/50" : "",
 							].join(" ")}
-							onclick={() => (selectedDestinationId = d.destination_id)}
+							onclick={() => openDestinationPackages(d.destination_id)}
 						>
 							{#if d.image_cover}
 								<img
@@ -429,28 +431,13 @@
 	</div>
 </section>
 
-{#if selectedDestinationId != null && selectedDestinationRow}
-	<section class="mx-auto max-w-6xl px-4 py-12">
-		{#if selectedPackages.length > 0}
-			<h2 class="mb-6 text-2xl font-bold">
-				✈ Packages in {destinationLabel(selectedDestinationRow)}
-			</h2>
-			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
-				{#each selectedPackages as pkg}
-					<div class="rounded-lg bg-white p-6 shadow transition hover:shadow-lg">
-						<h3 class="mb-2 font-semibold">{pkg.name}</h3>
-						<p class="mb-4 font-bold text-red-600">{pkg.price}</p>
-						<button class="w-full rounded bg-red-600 py-2 text-white hover:bg-red-700" onclick={browseAllTours}>
-							Book Package
-						</button>
-					</div>
-				{/each}
-			</div>
-		{:else}
-			<div class="w-full rounded-xl border border-gray-200 bg-gray-50 py-10 text-center text-gray-600">More coming soon</div>
-		{/if}
-	</section>
-{/if}
+<DestinationPackagesModal
+	open={showDestinationPackagesModal && selectedDestinationRow != null}
+	destinationLabel={selectedDestinationRow ? destinationLabel(selectedDestinationRow) : ""}
+	packages={selectedPackages}
+	on:close={closeDestinationPackagesModal}
+	on:primaryAction={browseAllTours}
+/>
 
 <Footer />
 
