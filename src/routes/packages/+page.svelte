@@ -160,84 +160,132 @@
 
 <Header />
 
-<section class="bg-linear-to-r from-red-600 to-orange-500 py-20 text-center text-white">
-	<h1 class="mb-4 text-4xl font-bold">Explore Travel Packages</h1>
-	<p>Find unforgettable adventures around the world</p>
+<!-- HERO SECTION -->
+<section class="relative overflow-hidden bg-gradient-to-r from-red-600 via-red-700 to-amber-600 py-24 text-white">
+	<div class="absolute inset-0 opacity-10">
+		<div class="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+		<div class="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+	</div>
+	<div class="relative mx-auto max-w-7xl px-6 text-center">
+		<h1 class="mb-4 text-5xl font-bold tracking-tight">Explore Travel Packages</h1>
+		<p class="text-lg text-red-50 max-w-2xl mx-auto">Discover unforgettable adventures to destinations around the world. Find your perfect getaway today.</p>
+	</div>
 </section>
 
-<section class="mx-auto max-w-7xl px-6 py-12">
-	<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-		<input
-			placeholder="Search package..."
-			bind:value={search}
-			class="rounded-lg border p-3"
-		/>
+<!-- FILTERS SECTION -->
+<section class="bg-gray-50 border-b border-gray-200 py-12">
+	<div class="mx-auto max-w-7xl px-6">
+		<div class="mb-2 text-sm font-semibold text-gray-700 uppercase tracking-wide">Filter Packages</div>
+		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div class="flex flex-col gap-2">
+				<label class="text-sm font-semibold text-gray-700" for="search">Search</label>
+				<input
+					id="search"
+					placeholder="Search package name..."
+					bind:value={search}
+					class="rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-200 outline-none transition"
+				/>
+			</div>
 
-		<select bind:value={continent} class="rounded-lg border p-3">
-			{#each continentFilterOptions as c}
-				<option value={c}>{c === "All" ? "All continents" : c}</option>
-			{/each}
-		</select>
+			<div class="flex flex-col gap-2">
+				<label class="text-sm font-semibold text-gray-700" for="continent-select">Continent</label>
+				<select bind:value={continent} id="continent-select" class="rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-200 outline-none transition bg-white">
+					{#each continentFilterOptions as c}
+						<option value={c}>{c === "All" ? "All continents" : c}</option>
+					{/each}
+				</select>
+			</div>
 
-		<select bind:value={duration} class="rounded-lg border p-3">
-			<option value="All">Any Duration</option>
-			<option value="5">5 Days</option>
-			<option value="7">7 Days</option>
-			<option value="10">10 Days</option>
-		</select>
+			<div class="flex flex-col gap-2">
+				<label class="text-sm font-semibold text-gray-700" for="duration-select">Duration</label>
+				<select bind:value={duration} id="duration-select" class="rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-red-600 focus:ring-2 focus:ring-red-200 outline-none transition bg-white">
+					<option value="All">Any Duration</option>
+					<option value="5">5 Days</option>
+					<option value="7">7 Days</option>
+					<option value="10">10 Days</option>
+				</select>
+			</div>
 
-		<div>
-			<label class="text-sm text-gray-600" for="pkg-max-price">Max Price ₱{maxPrice}</label>
-			<input
-				id="pkg-max-price"
-				type="range"
-				min="20000"
-				max="150000"
-				step="5000"
-				bind:value={maxPrice}
-				class="w-full"
-			/>
+			<div class="flex flex-col gap-2">
+				<div class="flex justify-between items-center">
+					<label class="text-sm font-semibold text-gray-700" for="pkg-max-price">Max Price</label>
+					<span class="text-sm font-bold text-red-600">₱{maxPrice.toLocaleString()}</span>
+				</div>
+				<input
+					id="pkg-max-price"
+					type="range"
+					min="20000"
+					max="150000"
+					step="5000"
+					bind:value={maxPrice}
+					class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-red-600"
+				/>
+				<div class="text-xs text-gray-600 flex justify-between">
+					<span>₱20k</span>
+					<span>₱150k</span>
+				</div>
+			</div>
 		</div>
+		{#if filtered.length > 0}
+			<div class="mt-4 text-sm text-gray-600">
+				Showing <span class="font-semibold text-gray-900">{filtered.length}</span> package{filtered.length !== 1 ? 's' : ''}
+			</div>
+		{/if}
 	</div>
 </section>
 
 <section class="mx-auto max-w-7xl px-6 pb-20">
-	<div class="grid gap-10 lg:grid-cols-2 xl:grid-cols-3">
-		{#if filtered.length === 0}
-			<div class="col-span-full py-12 text-center text-gray-600">More coming soon</div>
-		{:else}
+	{#if filtered.length === 0}
+		<div class="py-20 text-center">
+			<div class="text-6xl mb-4">🔍</div>
+			<p class="text-xl font-semibold text-gray-900">No packages found</p>
+			<p class="text-gray-600 mt-2">Try adjusting your filters to discover more travel packages</p>
+		</div>
+	{:else}
+		<div class="mb-8">
+			<h2 class="text-3xl font-bold text-gray-900">Available Packages</h2>
+			<p class="text-gray-600 mt-2">Handpicked travel experiences for your next adventure</p>
+		</div>
+		<div class="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
 			{#each filtered as pkg}
-				<div class="group overflow-hidden rounded-2xl bg-white shadow transition hover:shadow-2xl">
-					<div class="relative">
+				<div class="group overflow-hidden rounded-2xl bg-white shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100">
+					<div class="relative h-56 overflow-hidden bg-gray-200">
 						{#if pkg.image}
 							<img
 								src={pkg.image}
-								class="h-56 w-full object-cover transition group-hover:scale-110"
+								class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
 								alt={pkg.name}
 							/>
 						{:else}
 							<div
-								class="h-56 w-full bg-linear-to-br from-red-900/25 to-slate-800/40"
+								class="h-full w-full bg-gradient-to-br from-red-100/50 to-gray-200"
 								aria-hidden="true"
 							></div>
 						{/if}
-						<span class="absolute top-4 left-4 rounded-full bg-red-600 px-3 py-1 text-xs text-white">
+						<div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+						<span class="absolute top-4 left-4 inline-block rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-lg">
 							{pkg.badge}
 						</span>
 					</div>
 					<div class="p-6">
-						<h3 class="text-lg font-semibold">{pkg.name}</h3>
-						<p class="text-sm text-gray-500">
-							{pkg.destinationLine} · {pkg.continent}
+						<h3 class="text-lg font-bold text-gray-900 line-clamp-2">{pkg.name}</h3>
+						<p class="text-sm text-gray-600 mt-2">
+							<span class="font-medium text-gray-700">{pkg.destinationLine}</span>
 							{#if pkg.duration < 9999}
-								· {pkg.duration} days
+								<span class="text-gray-500"> · {pkg.duration} days</span>
 							{/if}
 						</p>
-						<div class="mt-4 flex items-center justify-between">
-							<p class="text-xl font-bold text-red-600">₱{pkg.price.toLocaleString()}</p>
+						<p class="text-xs text-gray-500 mt-1">📍 {pkg.continent}</p>
+						
+						{#if pkg.description}
+							<p class="text-sm text-gray-600 mt-3 line-clamp-2">{pkg.description}</p>
+						{/if}
+						
+						<div class="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+							<p class="text-2xl font-bold text-red-600">₱{pkg.price.toLocaleString()}</p>
 							<button
 								type="button"
-								class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+								class="rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200"
 								onclick={() => openDeal(pkg)}
 							>
 								View Deal
@@ -246,13 +294,13 @@
 					</div>
 				</div>
 			{/each}
-		{/if}
-	</div>
+		</div>
+	{/if}
 </section>
 
 {#if dealModalOpen && selectedDeal}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm transition-all duration-300"
 		role="dialog"
 		tabindex="0"
 		aria-modal="true"
@@ -264,82 +312,92 @@
 			if (e.key === "Escape") closeDeal();
 		}}
 	>
-		<div class="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+		<div class="relative w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
 			<button
 				type="button"
-				class="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-xl text-zinc-700 shadow hover:bg-white"
+				class="absolute right-4 top-4 z-10 grid h-12 w-12 place-items-center rounded-full bg-white shadow-lg hover:shadow-xl hover:scale-110 transition-transform text-2xl text-gray-600 hover:text-gray-900"
 				onclick={closeDeal}
 				aria-label="Close"
 			>
 				×
 			</button>
 
-			<div class="grid gap-0 md:grid-cols-[1.05fr_1fr]">
-				<div class="relative min-h-[220px] bg-zinc-100">
+			<div class="grid gap-0 md:grid-cols-[1.2fr_1fr]">
+				<div class="relative min-h-[300px] md:min-h-[400px] bg-gray-200 overflow-hidden">
 					{#if selectedDeal.image}
 						<img src={selectedDeal.image} alt={selectedDeal.name} class="h-full w-full object-cover" />
 					{:else}
-						<div class="h-full w-full bg-linear-to-br from-red-900/15 to-slate-800/25" aria-hidden="true"></div>
+						<div class="h-full w-full bg-gradient-to-br from-red-100 to-gray-300" aria-hidden="true"></div>
 					{/if}
-					<div class="absolute left-4 top-4">
-						<span class="rounded-full bg-red-700 px-3 py-1 text-xs font-semibold text-white">
+					<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+					<div class="absolute left-6 top-6">
+						<span class="inline-block rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-lg">
 							{selectedDeal.badge}
 						</span>
 					</div>
 				</div>
 
-				<div class="p-6">
-					<h2 class="text-xl font-bold text-zinc-900">{selectedDeal.name}</h2>
-					<p class="mt-1 text-sm text-zinc-600">
-						{selectedDeal.destinationLine} · {selectedDeal.continent}
-						{#if selectedDeal.duration < 9999}
-							· {selectedDeal.duration} days
-						{/if}
-					</p>
-
-					<p class="mt-4 text-2xl font-extrabold text-red-700">
-						₱{selectedDeal.price.toLocaleString("en-PH")}
-					</p>
-
-					{#if selectedDeal.description}
-						<p class="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
-							{selectedDeal.description}
+				<div class="p-8 flex flex-col justify-between">
+					<div>
+						<h2 class="text-3xl font-bold text-gray-900">{selectedDeal.name}</h2>
+						<p class="mt-3 text-base text-gray-600">
+							<span class="font-semibold text-gray-800">{selectedDeal.destinationLine}</span>
+							<span class="text-gray-500">
+								{#if selectedDeal.duration < 9999}
+									<span> • {selectedDeal.duration} days</span>
+								{/if}
+							</span>
 						</p>
-					{:else}
-						<p class="mt-4 text-sm text-zinc-600">No description provided yet.</p>
-					{/if}
+						<p class="text-sm text-gray-600 mt-2 font-medium">📍 {selectedDeal.continent}</p>
+
+						<p class="mt-6 text-4xl font-extrabold text-red-600">
+							₱{selectedDeal.price.toLocaleString("en-PH")}
+						</p>
+
+						{#if selectedDeal.description}
+							<div class="mt-6 pt-6 border-t border-gray-200">
+								<p class="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">
+									{selectedDeal.description}
+								</p>
+							</div>
+						{:else}
+							<p class="mt-6 pt-6 border-t border-gray-200 text-sm text-gray-600">No description provided yet.</p>
+						{/if}
+					</div>
 
 					{#if dealSendErr}
-						<p class="mt-3 text-sm text-red-800" role="alert">{dealSendErr}</p>
+						<div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+							<p class="text-sm text-red-800 font-medium" role="alert">⚠️ {dealSendErr}</p>
+						</div>
 					{/if}
 
-					<div class="mt-6 flex flex-wrap gap-3">
+					<div class="mt-8 flex flex-col gap-3">
 						<button
 							type="button"
-							class="rounded-xl border border-red-900/15 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+							class="rounded-lg bg-red-600 hover:bg-red-700 px-6 py-3 text-base font-semibold text-white transition-colors duration-200"
+							onclick={sendDealToChat}
+							disabled={dealSendBusy}
+						>
+							{dealSendBusy ? "Sending…" : "Send to Chat"}
+						</button>
+						<a
+							href="/userchat"
+							class="text-center rounded-lg border-2 border-red-600 hover:bg-red-50 px-6 py-3 text-base font-semibold text-red-600 transition-colors duration-200"
+						>
+							Open Chat
+						</a>
+						<button
+							type="button"
+							class="rounded-lg border border-gray-300 hover:bg-gray-50 px-6 py-3 text-base font-semibold text-gray-700 transition-colors duration-200"
 							onclick={closeDeal}
 						>
 							Close
 						</button>
-						<button
-							type="button"
-							class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
-							onclick={sendDealToChat}
-							disabled={dealSendBusy}
-						>
-							{dealSendBusy ? "Sending…" : "Send to chat"}
-						</button>
-						<a
-							href="/userchat"
-							class="inline-flex items-center justify-center rounded-xl border border-red-900/15 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
-						>
-							Open chat
-						</a>
 					</div>
 
 					{#if !canSendToChat}
-						<p class="mt-3 text-xs text-zinc-600">
-							Log in as a customer to send this deal to support chat.
+						<p class="mt-4 text-xs text-gray-600 text-center bg-blue-50 border border-blue-200 rounded-lg p-3">
+							ℹ️ Log in as a customer to send this deal to support chat.
 						</p>
 					{/if}
 				</div>
@@ -349,44 +407,53 @@
 {/if}
 
 <section class="mx-auto max-w-7xl px-6 pb-20">
-	<h2 class="mb-6 text-3xl font-bold">Destinations by continent</h2>
+	<div class="mb-12">
+		<h2 class="mb-2 text-4xl font-bold text-gray-900">Destinations by Continent</h2>
+		<p class="text-gray-600">Explore our curated selection of travel destinations</p>
+	</div>
+
 	{#each data.continentCarouselOrder ?? [] as cont (cont)}
 		{@const cards = destCardsForContinent(cont)}
 		<div class="mb-16">
-			<h3 class="mb-4 text-2xl font-semibold">{cont}</h3>
+			<h3 class="mb-6 text-2xl font-bold text-gray-900 flex items-center gap-2">
+				<span class="text-3xl">🌍</span>
+				{cont}
+			</h3>
 			{#if cards.length === 0}
-				<div class="w-full rounded-xl border border-gray-200 bg-gray-50 py-10 text-center text-gray-600">
-					More coming soon
+				<div class="w-full rounded-xl border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 py-12 text-center text-gray-600">
+					<p class="text-lg font-medium">Coming soon</p>
+					<p class="text-sm mt-2">More destinations in {cont} are being added</p>
 				</div>
 			{:else}
-				<div class="relative">
+				<div class="relative group">
 					<button
 						type="button"
 						onclick={() => scrollContinent(cont, -400)}
-						class="absolute top-1/2 -left-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+						class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 rounded-full bg-white shadow-lg hover:shadow-xl p-3 text-2xl leading-none text-gray-700 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100"
 					>
 						‹
 					</button>
 					<div
 						bind:this={carouselRefs[cont]}
-						class="flex gap-6 overflow-x-auto scroll-smooth"
+						class="flex gap-6 overflow-x-auto scroll-smooth pb-2 snap-x snap-mandatory scrollbar-hide"
 					>
 						{#each cards as d}
-							<div class="group relative min-w-[260px] overflow-hidden rounded-xl shadow">
+							<div class="group/card relative min-w-[280px] h-48 overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex-shrink-0 snap-start">
 								{#if d.image}
 									<img
 										src={d.image}
 										alt={d.name}
-										class="h-44 w-full object-cover transition group-hover:scale-110"
+										class="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-110"
 									/>
 								{:else}
 									<div
-										class="h-44 w-full bg-linear-to-br from-red-900/20 to-slate-800/35"
+										class="h-full w-full bg-gradient-to-br from-red-100 to-gray-300"
 										aria-hidden="true"
 									></div>
 								{/if}
-								<div class="absolute inset-0 flex items-center justify-center bg-black/40">
-									<h4 class="text-lg font-bold text-white">{d.name}</h4>
+								<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+								<div class="absolute inset-0 flex items-center justify-center">
+									<h4 class="text-xl font-bold text-white text-center px-4 drop-shadow-lg">{d.name}</h4>
 								</div>
 							</div>
 						{/each}
@@ -394,7 +461,7 @@
 					<button
 						type="button"
 						onclick={() => scrollContinent(cont, 400)}
-						class="absolute top-1/2 -right-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+						class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 rounded-full bg-white shadow-lg hover:shadow-xl p-3 text-2xl leading-none text-gray-700 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100"
 					>
 						›
 					</button>
@@ -406,32 +473,36 @@
 	{#if (data.destinationsOther ?? []).length > 0}
 		{@const otherCards = destCardsOther()}
 		<div class="mb-16">
-			<h3 class="mb-4 text-2xl font-semibold">Other regions</h3>
-			<div class="relative">
+			<h3 class="mb-6 text-2xl font-bold text-gray-900 flex items-center gap-2">
+				<span class="text-3xl">🌏</span>
+				Other Regions
+			</h3>
+			<div class="relative group">
 				<button
 					type="button"
 					onclick={() => scrollContinent("__other__", -400)}
-					class="absolute top-1/2 -left-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+					class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 rounded-full bg-white shadow-lg hover:shadow-xl p-3 text-2xl leading-none text-gray-700 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100"
 				>
 					‹
 				</button>
-				<div bind:this={carouselRefs["__other__"]} class="flex gap-6 overflow-x-auto scroll-smooth">
+				<div bind:this={carouselRefs["__other__"]} class="flex gap-6 overflow-x-auto scroll-smooth pb-2 snap-x snap-mandatory scrollbar-hide">
 					{#each otherCards as d}
-						<div class="group relative min-w-[260px] overflow-hidden rounded-xl shadow">
+						<div class="group/card relative min-w-[280px] h-48 overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex-shrink-0 snap-start">
 							{#if d.image}
 								<img
 									src={d.image}
 									alt={d.name}
-									class="h-44 w-full object-cover transition group-hover:scale-110"
+									class="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-110"
 								/>
 							{:else}
 								<div
-									class="h-44 w-full bg-linear-to-br from-red-900/20 to-slate-800/35"
+									class="h-full w-full bg-gradient-to-br from-red-100 to-gray-300"
 									aria-hidden="true"
 								></div>
 							{/if}
-							<div class="absolute inset-0 flex items-center justify-center bg-black/40">
-								<h4 class="text-lg font-bold text-white">{d.name}</h4>
+							<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+							<div class="absolute inset-0 flex items-center justify-center">
+								<h4 class="text-xl font-bold text-white text-center px-4 drop-shadow-lg">{d.name}</h4>
 							</div>
 						</div>
 					{/each}
@@ -439,7 +510,7 @@
 				<button
 					type="button"
 					onclick={() => scrollContinent("__other__", 400)}
-					class="absolute top-1/2 -right-4 z-10 -translate-y-1/2 rounded-full bg-white p-2 text-3xl leading-none shadow hover:shadow-lg"
+					class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 rounded-full bg-white shadow-lg hover:shadow-xl p-3 text-2xl leading-none text-gray-700 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100"
 				>
 					›
 				</button>
