@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
 import { encryptPayload } from "$lib/payloadEncryption";
 
-// Simple in-memory store for typing status (conversation_id -> timestamp of last typing event)
+// Track typing status (conversation_id -> timestamp of last typing event)
 const typingStatus = new Map<number, number>();
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -27,9 +27,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (isTyping) {
 		typingStatus.set(conversationId, Date.now());
-	} else {
-		typingStatus.delete(conversationId);
 	}
+	// Note: We don't delete from typingStatus when isTyping is false
+	// The presence endpoint will check if the timestamp is recent enough
 
 	return json(await encryptPayload(JSON.stringify({ success: true })));
 };

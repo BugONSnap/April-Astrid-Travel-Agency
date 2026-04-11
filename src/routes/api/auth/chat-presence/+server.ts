@@ -32,19 +32,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	);
 };
 
-// Helper to update online status (called from other endpoints)
-export function setUserOnline(userId: number) {
-	onlineStatus.set(userId, Date.now());
-}
-
-// Helper to check if user is online
-export function isUserOnline(userId: number): boolean {
-	const lastActivityTime = onlineStatus.get(userId) ?? 0;
-	return Date.now() - lastActivityTime < 30000; // Consider online if active in last 30 seconds
-}
-
-// Helper to report typing
-export function setTyping(conversationId: number) {
+// Helper to report typing (used by chat-typing endpoint)
+function setTyping(conversationId: number) {
 	typingStatus.set(conversationId, Date.now());
 }
 
