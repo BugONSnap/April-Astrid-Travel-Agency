@@ -8,7 +8,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string): 
 	}
 
 	const resend = new Resend(env.RESEND_API_KEY);
-	const fromEmail = env.RESEND_FROM_EMAIL || 'noreply@resend.dev';
+	const fromEmail = env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
 	const emailHtml = `
 <!DOCTYPE html>
