@@ -1,14 +1,13 @@
 import { Resend } from 'resend';
 import { env } from 'process';
 
-const resend = new Resend(env.RESEND_API_KEY);
-
 export async function sendPasswordResetEmail(email: string, resetLink: string): Promise<void> {
 	if (!env.RESEND_API_KEY) {
 		console.error('RESEND_API_KEY is not set in environment variables');
 		throw new Error('Email service is not configured');
 	}
 
+	const resend = new Resend(env.RESEND_API_KEY);
 	const fromEmail = env.RESEND_FROM_EMAIL || 'noreply@resend.dev';
 
 	const emailHtml = `
