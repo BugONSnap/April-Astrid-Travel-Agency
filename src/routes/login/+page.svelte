@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto, invalidate } from "$app/navigation";
-import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
+	import { page } from "$app/stores";
+	import { browser } from "$app/environment";
+	import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 	type Tab = 'login' | 'register';
 
 	let activeTab: Tab = 'login';
@@ -19,7 +21,6 @@ import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 	let formError = '';
 	let submitting = false;
 
-	// Forgot / Reset password modal
 	let forgotOpen = false;
 	let forgotStep: "request" | "reset" = "request";
 	let forgotEmail = "";
@@ -32,6 +33,22 @@ import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 
 	$: passwordMismatch =
 		regConfirmPassword.length > 0 && regPassword !== regConfirmPassword;
+
+	// Check for reset token from URL (from email link)
+	$: if (browser && $page.url.searchParams.has('resetToken')) {
+		const tokenFromUrl = $page.url.searchParams.get('resetToken');
+		const emailFromUrl = $page.url.searchParams.get('email');
+		if (tokenFromUrl && emailFromUrl) {
+			resetToken = tokenFromUrl;
+			forgotEmail = emailFromUrl;
+			forgotOpen = true;
+			forgotStep = "reset";
+			forgotError = "";
+			forgotSuccess = "Enter your new password to reset your account.";
+			// Clean up URL
+			window.history.replaceState({}, '', '/login');
+		}
+	}
 
 	async function sendEncryptedRequest(url: string, payload: Record<string, unknown>) {
 		const encrypted = await encryptPayload(JSON.stringify(payload));
@@ -117,14 +134,9 @@ import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
 				return;
 			}
 
-			// For this project we return the reset token in dev so the popup can proceed.
-			if (!data.resetToken) {
-				forgotSuccess = "Check your email for the reset link/token.";
-				return;
-			}
-
-			resetToken = data.resetToken;
-			forgotStep = "reset";
+			// Always show success message - user will receive email with reset link
+			// The reset form only appears when they click the link in the email
+			forgotSuccess = "Check your email for the password reset link. It will expire in 1 hour.";
 		} finally {
 			forgotSubmitting = false;
 		}

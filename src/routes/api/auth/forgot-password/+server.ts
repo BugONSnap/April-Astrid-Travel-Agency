@@ -5,6 +5,7 @@ import { db } from "$lib/server/db";
 import * as schema from "$lib/server/db/schema";
 import { env } from "process";
 import { decryptPayload, encryptPayload } from "$lib/payloadEncryption";
+import { sendPasswordResetEmail } from "$lib/server/emailService";
 
 function normalizeEmail(email: string): string {
 	return email.trim().toLowerCase();
@@ -77,13 +78,31 @@ export const POST: RequestHandler = async ({ request }) => {
 			expires_at: expiresAt,
 		});
 
-		// For now there is no email sender in this project.
-		// In development, return the token so your popup can immediately proceed.
+		// Send email with reset link
+		const resetLink = `${env.ORIGIN || 'http://localhost:5173'}/login?resetToken=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
+		
+		try {
+			await sendPasswordResetEmail(normalizedEmail, resetLink);
+		} catch (emailError) {
+			console.error("[forgot-password] email sending failed:", emailError);
+			// In production, don't reveal email sending errors to avoid information leakage
+			if (env.NODE_ENV === "production") {
+				return json(
+					await encryptPayload(JSON.stringify({
+						message: "Internal error",
+					})),
+					{ status: 500 },
+				);
+			}
+		}
+
+		// For development only: also return the token directly so you can test without email
 		const debugReturnToken = env.NODE_ENV !== "production";
 
 		return json(await encryptPayload(JSON.stringify({
 			ok: true,
 			resetToken: debugReturnToken ? resetToken : undefined,
+			message: "If an account exists with this email, you will receive a password reset link within a few minutes.",
 		})));
 	} catch (err) {
 		console.error("[forgot-password] error:", err);
