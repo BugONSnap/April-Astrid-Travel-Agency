@@ -335,7 +335,7 @@
 							onclick={openForgotPassword}
 							disabled={submitting}
 						>
-							Forgot password?
+							
 						</button>
 					</div>
 
