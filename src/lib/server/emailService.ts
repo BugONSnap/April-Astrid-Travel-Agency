@@ -10,6 +10,8 @@ export async function sendPasswordResetEmail(email: string, resetLink: string): 
 	const resend = new Resend(env.RESEND_API_KEY);
 	const fromEmail = env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
+	console.log('[emailService] sending reset email', { fromEmail, to: email });
+
 	const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -111,8 +113,8 @@ export async function sendPasswordResetEmail(email: string, resetLink: string): 
 		});
 
 		if (response.error) {
-			console.error('Resend error:', response.error);
-			throw new Error(`Failed to send email: ${response.error.message}`);
+			console.error('Resend error response:', response.error, response);
+			throw new Error(`Failed to send email: ${response.error.message || JSON.stringify(response.error)}`);
 		}
 
 		console.log(`Password reset email sent to ${email}. ID: ${response.data?.id}`);

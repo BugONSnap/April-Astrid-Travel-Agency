@@ -84,16 +84,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		try {
 			await sendPasswordResetEmail(normalizedEmail, resetLink);
 		} catch (emailError) {
-			console.error("[forgot-password] email sending failed:", emailError);
-			// In production, don't reveal email sending errors to avoid information leakage
-			if (env.NODE_ENV === "production") {
-				return json(
-					await encryptPayload(JSON.stringify({
-						message: "Internal error",
-					})),
-					{ status: 500 },
-				);
-			}
+			const errorMessage =
+				emailError instanceof Error
+					? emailError.message
+					: String(emailError);
+			console.error("[forgot-password] email sending failed:", errorMessage, emailError);
+			// In production, keep the response generic but log details for debugging.
+			return json(
+				await encryptPayload(JSON.stringify({
+					message: "Internal error",
+					details: env.NODE_ENV !== "production" ? errorMessage : undefined,
+				})),
+				{ status: 500 },
+			);
 		}
 
 		// For development only: also return the token directly so you can test without email
